@@ -1,0 +1,203 @@
+"""
+Technical indicators for trading strategies.
+Includes various momentum, trend, and volatility indicators.
+"""
+
+import numpy as np
+import pandas as pd
+
+
+def calculate_simple_moving_average(prices, period):
+    """
+    Calculate Simple Moving Average (SMA).
+    
+    Args:
+        prices: List or array of prices
+        period: Number of periods for the moving average
+        
+    Returns:
+        SMA values
+    """
+    if len(prices) < period:
+        return None
+    
+    sma = []
+    for i in range(len(prices)):
+        if i < period - 1:
+            sma.append(None)
+        else:
+            sma.append(sum(prices[i - period + 1:i + 1]) / period)
+    
+    return sma
+
+
+def calculate_exponential_moving_average(prices, period):
+    """
+    Calculate Exponential Moving Average (EMA).
+    
+    Args:
+        prices: List or array of prices
+        period: Number of periods for the EMA
+        
+    Returns:
+        EMA values
+    """
+    if len(prices) < period:
+        return [None] * len(prices)
+    
+    multiplier = 2 / (period + 1)
+    ema = [sum(prices[:period]) / period]  # Start with SMA for first value
+    
+    for i in range(period, len(prices)):
+        ema_val = (prices[i] * multiplier) + (ema[-1] * (1 - multiplier))
+        ema.append(ema_val)
+    
+    # Prepend None values to match length
+    result = [None] * (period - 1) + ema
+    return result
+
+
+def calculate_rsi(prices, period=14):
+    """
+    Calculate Relative Strength Index (RSI).
+    
+    Args:
+        prices: List or array of prices
+        period: Number of periods for RSI calculation (default 14)
+        
+    Returns:
+        RSI value
+    """
+    if len(prices) < period + 1:
+        return None
+    
+    gains = []
+    losses = []
+    
+    for i in range(1, period + 1):
+        change = prices[-i] - prices[-i-1]
+        if change > 0:
+            gains.append(change)
+            losses.append(0)
+        else:
+            gains.append(0)
+            losses.append(abs(change))
+    
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    
+    if avg_loss == 0:
+        return 100.0
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    return rsi
+
+
+def calculate_bollinger_bands(prices, period=20, std_dev=2):
+    """
+    Calculate Bollinger Bands.
+    
+    Args:
+        prices: List or array of prices
+        period: Number of periods for the middle band (default 20)
+        std_dev: Number of standard deviations for the upper/lower bands (default 2)
+        
+    Returns:
+        Tuple of (upper_band, middle_band, lower_band)
+    """
+    if len(prices) < period:
+        return None, None, None
+    
+    # Calculate the middle band (SMA)
+    middle_band = sum(prices[-period:]) / period
+    
+    # Calculate standard deviation
+    variance = sum([(price - middle_band) ** 2 for price in prices[-period:]]) / period
+    std = variance ** 0.5
+    
+    # Calculate upper and lower bands
+    upper_band = middle_band + (std_dev * std)
+    lower_band = middle_band - (std_dev * std)
+    
+    return upper_band, middle_band, lower_band
+
+
+def calculate_macd(prices, fast=12, slow=26, signal=9):
+    """
+    Calculate MACD (Moving Average Convergence Divergence).
+    
+    Args:
+        prices: List or array of prices
+        fast: Fast EMA period (default 12)
+        slow: Slow EMA period (default 26)
+        signal: Signal line EMA period (default 9)
+        
+    Returns:
+        Tuple of (macd_line, signal_line, histogram)
+    """
+    if len(prices) < slow + signal:
+        return None, None, None
+    
+    # Calculate EMAs
+    fast_ema = calculate_exponential_moving_average(prices, fast)
+    slow_ema = calculate_exponential_moving_average(prices, slow)
+    
+    # Calculate MACD line
+    macd_line = []
+    for i in range(len(slow_ema)):
+        if fast_ema[i + len(fast_ema) - len(slow_ema)] is not None and slow_ema[i] is not None:
+            macd_line.append(
+                fast_ema[i + len(fast_ema) - len(slow_ema)] - slow_ema[i]
+            )
+        else:
+            macd_line.append(None)
+    
+    # Calculate signal line
+    signal_line = calculate_exponential_moving_average(
+        [val for val in macd_line if val is not None], 
+        signal
+    )
+    
+    # Calculate histogram
+    histogram = []
+    for i in range(len(signal_line)):
+        if macd_line[i + len(macd_line) - len(signal_line)] is not None and signal_line[i] is not None:
+            histogram.append(
+                macd_line[i + len(macd_line) - len(signal_line)] - signal_line[i]
+            )
+        else:
+            histogram.append(None)
+    
+    return macd_line[-len(signal_line):], signal_line, histogram
+
+
+def calculate_atr(high_prices, low_prices, close_prices, period=14):
+    """
+    Calculate Average True Range (ATR) - a measure of volatility.
+    
+    Args:
+        high_prices: List or array of high prices
+        low_prices: List or array of low prices
+        close_prices: List or array of closing prices
+        period: Number of periods for ATR calculation (default 14)
+        
+    Returns:
+        ATR value
+    """
+    if len(high_prices) < period or len(low_prices) < period or len(close_prices) < period:
+        return None
+    
+    true_ranges = []
+    for i in range(1, len(close_prices)):
+        high_low = high_prices[i] - low_prices[i]
+        high_close = abs(high_prices[i] - close_prices[i-1])
+        low_close = abs(low_prices[i] - close_prices[i-1])
+        
+        true_range = max(high_low, high_close, low_close)
+        true_ranges.append(true_range)
+    
+    # Calculate ATR using simple moving average of true ranges
+    atr = sum(true_ranges[-period:]) / period
+    return atr

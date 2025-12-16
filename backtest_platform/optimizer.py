@@ -1,0 +1,156 @@
+"""
+Parameter optimization module for trading strategies.
+Provides functionality to optimize strategy parameters using various methods.
+"""
+
+import itertools
+from typing import Dict, List, Any, Callable
+from backtest_platform.core.backtester import Backtester
+
+
+class ParameterOptimizer:
+    """
+    Class for optimizing strategy parameters.
+    """
+    
+    def __init__(self, backtester: Backtester):
+        """
+        Initialize the optimizer with a backtester instance.
+        
+        Args:
+            backtester: An instance of the Backtester class
+        """
+        self.backtester = backtester
+        self.results = []
+        
+    def grid_search(self, param_grid: Dict[str, List[Any]], metric='total_return'):
+        """
+        Perform grid search optimization over parameter combinations.
+        
+        Args:
+            param_grid: Dictionary with parameter names as keys and lists of values as values
+            metric: Performance metric to optimize ('total_return', 'sharpe_ratio', etc.)
+            
+        Returns:
+            Dictionary with best parameters and their performance
+        """
+        # Get all parameter combinations
+        param_names = list(param_grid.keys())
+        param_values = list(param_grid.values())
+        combinations = list(itertools.product(*param_values))
+        
+        best_score = float('-inf')
+        best_params = None
+        
+        for combo in combinations:
+            # Create a copy of the strategy with new parameters
+            strategy_class = self.backtester.strategy.__class__
+            params_dict = {name: value for name, value in zip(param_names, combo)}
+            
+            try:
+                # Create new strategy instance with updated parameters
+                new_strategy = strategy_class(**params_dict)
+                
+                # Set the same initial capital as the original
+                temp_backtester = Backtester(new_strategy, self.backtester.initial_capital)
+                temp_backtester.load_data(self.backtester.data)
+                
+                # Run backtest
+                results = temp_backtester.run_backtest()
+                
+                # Get the score for the chosen metric
+                score = results.get(metric, 0)
+                
+                # Store results
+                self.results.append({
+                    'params': params_dict,
+                    'results': results,
+                    'score': score
+                })
+                
+                # Update best if current score is better
+                if score > best_score:
+                    best_score = score
+                    best_params = params_dict
+                    
+            except Exception as e:
+                print(f"Error testing parameters {params_dict}: {str(e)}")
+                continue
+        
+        return {
+            'best_params': best_params,
+            'best_score': best_score,
+            'all_results': self.results
+        }
+    
+    def brute_force_optimize(self, param_ranges: Dict[str, tuple], 
+                             step_sizes: Dict[str, float], metric='total_return'):
+        """
+        Perform brute force optimization over parameter ranges.
+        
+        Args:
+            param_ranges: Dictionary with parameter names as keys and (min, max) tuples as values
+            step_sizes: Dictionary with parameter names as keys and step sizes as values
+            metric: Performance metric to optimize
+            
+        Returns:
+            Dictionary with best parameters and their performance
+        """
+        param_grid = {}
+        for param, (min_val, max_val) in param_ranges.items():
+            step = step_sizes.get(param, 1.0)
+            values = []
+            current = min_val
+            while current <= max_val:
+                values.append(current)
+                current += step
+            param_grid[param] = values
+            
+        return self.grid_search(param_grid, metric)
+    
+    def get_top_n_results(self, n=5, metric='total_return'):
+        """
+        Get top N parameter combinations by performance.
+        
+        Args:
+            n: Number of top results to return
+            metric: Performance metric to sort by
+            
+        Returns:
+            List of top N parameter combinations with their scores
+        """
+        sorted_results = sorted(
+            self.results, 
+            key=lambda x: x['score'], 
+            reverse=True
+        )
+        
+        return sorted_results[:n]
+
+
+def optimize_strategy(backtester: Backtester, param_grid: Dict[str, List[Any]], 
+                      optimization_method='grid_search', metric='total_return'):
+    """
+    Convenience function to optimize a strategy.
+    
+    Args:
+        backtester: An instance of the Backtester class
+        param_grid: Dictionary with parameter names as keys and lists of values as values
+        optimization_method: Method to use for optimization ('grid_search', 'brute_force')
+        metric: Performance metric to optimize
+            
+    Returns:
+        Dictionary with optimization results
+    """
+    optimizer = ParameterOptimizer(backtester)
+    
+    if optimization_method == 'grid_search':
+        return optimizer.grid_search(param_grid, metric)
+    elif optimization_method == 'brute_force':
+        # Convert param_grid to ranges and step_sizes for brute force
+        param_ranges = {k: (min(v), max(v)) for k, v in param_grid.items()}
+        step_sizes = {k: (max(v) - min(v)) / len(v) if len(v) > 1 else 1.0 
+                      for k, v in param_grid.items()}
+        return optimizer.brute_force_optimize(param_ranges, step_sizes, metric)
+    else:
+        raise ValueError(f"Unknown optimization method: {optimization_method}")

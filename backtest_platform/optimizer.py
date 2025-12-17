@@ -53,7 +53,14 @@ class ParameterOptimizer:
                 
                 # Set the same initial capital as the original
                 temp_backtester = Backtester(new_strategy, self.backtester.initial_capital)
-                temp_backtester.load_data(self.backtester.data)
+                
+                # Copy the data - either load from path or assign directly if already loaded
+                if isinstance(self.backtester.data, str):
+                    # If data is a path string, load it
+                    temp_backtester.load_data(self.backtester.data)
+                else:
+                    # If data is already a DataFrame, assign it directly
+                    temp_backtester.data = self.backtester.data
                 
                 # Run backtest
                 results = temp_backtester.run_backtest()

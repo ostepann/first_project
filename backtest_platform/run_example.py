@@ -10,7 +10,7 @@ from core.backtester import Backtester
 from strategies.dual_momentum import DualMomentumStrategy
 from strategies.rsi_strategy import RSIStrategy
 from utils import load_market_data
-from optimizer import optimize_strategy
+from backtest_platform.optimizer import optimize_strategy
 
 
 def main():
@@ -68,7 +68,7 @@ def main():
     
     # Show top 3 parameter combinations
     print("\nTop 3 parameter combinations:")
-    from optimizer import ParameterOptimizer
+    from backtest_platform.optimizer import ParameterOptimizer
     temp_optimizer = ParameterOptimizer(rsi_backtester)
     temp_optimizer.results = optimizer['all_results']
     top_results = temp_optimizer.get_top_n_results(n=3)

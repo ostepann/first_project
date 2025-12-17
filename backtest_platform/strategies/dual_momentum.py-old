@@ -1,91 +1,56 @@
-"""
-Dual Momentum Strategy implementation.
-This strategy considers both relative momentum (vs benchmark) and time series momentum.
-"""
-
-import numpy as np
+from core.base_strategy import BaseStrategy
+from indicators.volatility import rolling_volatility, market_volatility
 import pandas as pd
-from backtest_platform.core.base_strategy import BaseStrategy
-
+import numpy as np
 
 class DualMomentumStrategy(BaseStrategy):
-    """
-    Dual Momentum Strategy implementation.
-    Compares the performance of an asset against a benchmark (relative momentum)
-    and evaluates its own performance over time (time series momentum).
-    """
-    
-    def __init__(self, lookback_period=126, benchmark_ticker='SPY', 
-                 momentum_threshold=0.0, allocation=1.0):
-        """
-        Initialize the Dual Momentum Strategy.
-        
-        Args:
-            lookback_period: Number of periods to look back for momentum calculation
-            benchmark_ticker: Ticker symbol for the benchmark asset
-            momentum_threshold: Minimum momentum required to take a position
-            allocation: Fraction of capital to allocate (1.0 = 100%)
-        """
-        super().__init__()
-        self.lookback_period = lookback_period
-        self.benchmark_ticker = benchmark_ticker
-        self.momentum_threshold = momentum_threshold
-        self.allocation = allocation
-        self.price_history = []
-        self.benchmark_history = []
-        
-    def initialize(self, data):
-        """
-        Initialize strategy with data.
-        
-        Args:
-            data: Input data for the strategy
-        """
-        # Extract closing prices from the data
-        if isinstance(data, pd.DataFrame):
-            if 'close' in data.columns:
-                self.price_history = data['close'].tolist()
-            elif 'Close' in data.columns:
-                self.price_history = data['Close'].tolist()
-            else:
-                # Assume last column is closing price
-                self.price_history = data.iloc[:, -1].tolist()
-    
-    def calculate_signal(self, data_point):
-        """
-        Calculate trading signal based on dual momentum principle.
-        
-        Args:
-            data_point: A single data point (e.g., OHLCV data)
-            
-        Returns:
-            Signal: Trading signal (-1 for sell, 0 for hold, 1 for buy)
-        """
-        # Add current price to history
-        if isinstance(data_point, pd.Series) or isinstance(data_point, dict):
-            if 'close' in data_point:
-                current_price = data_point['close']
-            elif 'Close' in data_point:
-                current_price = data_point['Close']
-            else:
-                current_price = data_point[list(data_point.keys())[-1]]
-        else:
-            current_price = data_point
-            
-        self.price_history.append(current_price)
-        
-        # Only make decisions after we have enough data for lookback period
-        if len(self.price_history) < self.lookback_period:
-            return 0
-        
-        # Calculate time series momentum (performance over lookback period)
-        lookback_price = self.price_history[-self.lookback_period]
-        time_series_momentum = (current_price - lookback_price) / lookback_price
-        
-        # Generate signal based on time series momentum
-        if time_series_momentum > self.momentum_threshold:
-            return 1  # Buy signal
-        elif time_series_momentum < -self.momentum_threshold:
-            return -1  # Sell signal
-        else:
-            return 0  # Hold signal
+    def __init__(
+        self,
+        lookback_period: int = 126,
+        vol_window: int = 20,
+        max_vol_threshold: float = 0.35,
+        market_vol_mult: float = 2.0,
+        risk_free_ticker: str = 'LQDT'
+    ):
+        self.lookback = lookback_period
+        self.vol_window = vol_window
+        self.max_vol = max_vol_threshold
+        self.market_vol_mult = market_vol_mult
+        self.risk_free = risk_free_ticker
+
+    def generate_signal(self, data_dict, market_data=None, **kwargs):
+        # Рыночная волатильность (глобальный фильтр)
+        if market_data is not None and len(market_data) >= self.vol_window:
+            mkt_vol = market_volatility(market_data, self.vol_window).iloc[-1]
+            if mkt_vol > self.max_vol * self.market_vol_mult:
+                return {'selected': self.risk_free}
+
+        best_score = -1e10
+        best_ticker = self.risk_free
+
+        for ticker, df in data_dict.items():
+            if ticker == self.risk_free:
+                continue
+            if len(df) < self.lookback:
+                continue
+
+            # Momentum
+            lookback_price = df['CLOSE'].iloc[-self.lookback]
+            current_price = df['CLOSE'].iloc[-1]
+            momentum = (current_price - lookback_price) / lookback_price
+
+            # Индивидуальная волатильность
+            returns = df['CLOSE'].pct_change()
+            vol_series = rolling_volatility(returns, self.vol_window)
+            vol = vol_series.iloc[-1]
+
+            if pd.isna(vol) or vol > self.max_vol:
+                continue
+
+            # Score = momentum / volatility
+            score = momentum / vol if vol > 0 else -1e10
+            if score > best_score:
+                best_score = score
+                best_ticker = ticker
+
+        return {'selected': best_ticker}

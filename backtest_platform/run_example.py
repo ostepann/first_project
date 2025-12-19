@@ -90,14 +90,14 @@ def main():
     # === ЗАПУСК ОПТИМИЗАЦИИ ===
     print("\n🔍 Запуск оптимизации параметров...")
     param_grid = {
-        'base_lookback': [100, 126, 150],
-        'base_vol_window': [15, 20, 25],
-        'max_vol_threshold': [0.3, 0.35, 0.4]
+        'base_lookback': [126],
+        'base_vol_window': [20],
+        'max_vol_threshold': [0.35]
     }
 
     try:
         opt_results = optimize_dual_momentum(
-            data=data,
+            data_dict=data,
             market_data=market_df,
             rvi_data=rvi_data,
             param_grid=param_grid,

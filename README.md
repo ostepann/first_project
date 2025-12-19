@@ -14,6 +14,14 @@ This platform provides a comprehensive solution for developing, testing, and opt
 
 ## Installation
 
+First, install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then install the package:
+
 ```bash
 pip install -e .
 ```
@@ -44,8 +52,16 @@ print(results)
 
 ### Running the Example
 
+There are two ways to run the example:
+
+1. Direct Python execution:
 ```bash
 python -m backtest_platform.run_example
+```
+
+2. Using the start script:
+```bash
+./start_project.sh
 ```
 
 ## Project Structure

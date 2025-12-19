@@ -41,6 +41,7 @@ class Backtester:
         strategy,
         data_dict: Dict[str, pd.DataFrame],
         market_data: Optional[pd.DataFrame] = None,
+        rvi_data=None,
         initial_capital: float = 100_000,
         price_col: str = 'CLOSE'
     ):
@@ -78,7 +79,19 @@ class Backtester:
                 continue
 
             # Сигнал
-            signal = strategy.generate_signal(daily_dfs, market_data=market_data)
+            # signal = strategy.generate_signal(daily_dfs, market_data=market_data)
+
+            # начало 19.12.2025
+            # Передаём RVI на текущую дату
+            current_rvi = None
+            if rvi_data is not None:
+                rvi_row = rvi_data[rvi_data['TRADEDATE'] == date]
+                if not rvi_row.empty:
+                    current_rvi = rvi_row
+
+            signal = strategy.generate_signal(daily_dfs, market_data=market_data, rvi_data=current_rvi)
+            # конец 19.12.2025
+
             selected = signal.get('selected', current_asset)
 
             if selected != current_asset:

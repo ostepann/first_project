@@ -33,8 +33,8 @@ def optimize_dual_momentum(
     # Сетка параметров по умолчанию (если не передана)
     if param_grid is None:
         param_grid = {
-            'base_lookback': [100, 126, 150],
-            'base_vol_window': [15, 20, 25],
+            'base_lookback': [3, 5, 10, 20, 50, 100],
+            'base_vol_window': [3, 5, 15, 20, 25],
             'max_vol_threshold': [0.3, 0.35, 0.4]
         }
 

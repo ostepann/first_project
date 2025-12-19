@@ -17,7 +17,10 @@ def detect_trend(prices: pd.Series, window: int = 20) -> str:
     if len(prices) < window:
         return 'sideways'
     
-    y = prices.tail(window).values
+    y = prices.tail(window).dropna().values
+    if len(y) < 2:  # Нужно хотя бы 2 точки для линейной регрессии
+        return 'sideways'
+        
     x = np.arange(len(y)).reshape(-1, 1)
     
     model = LinearRegression()
@@ -37,7 +40,11 @@ def get_trend_strength(prices: pd.Series, window: int = 14) -> float:
     """Возвращает силу тренда через нормированный наклон."""
     if len(prices) < window:
         return 0.0
-    y = prices.tail(window).values
+        
+    y = prices.tail(window).dropna().values
+    if len(y) < 2:  # Нужно хотя бы 2 точки для вычисления наклона
+        return 0.0
+        
     x = np.arange(len(y))
     slope = np.polyfit(x, y, 1)[0]
     return abs(slope) / prices.iloc[-1]  # нормировка

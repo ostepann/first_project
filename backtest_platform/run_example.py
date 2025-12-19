@@ -60,7 +60,8 @@ def main():
     )
 
     bt = Backtester(
-        commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
+        commission={'EQMX': 0.0, 'OBLG': 0.0, 'GOLD': 0.0},
+#        commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
         default_commission=0.0,
         slippage=0.001,
         use_slippage=True,
@@ -87,12 +88,12 @@ def main():
         print(f"❌ Ошибка при бэктесте: {e}")
         return
 
-    # === ЗАПУСК ОПТИМИЗАЦИИ ===
-    print("\n🔍 Запуск оптимизации параметров...")
+    # === ЗАПУСК ПОЛНОЙ ОПТИМИЗАЦИИ ===
+    print("\n🔍 Запуск полной оптимизации (75 комбинаций)...")
     param_grid = {
-        'base_lookback': [126],
-        'base_vol_window': [20],
-        'max_vol_threshold': [0.35]
+        'base_lookback': [5, 10, 20, 50, 100],
+        'base_vol_window': [5, 10, 15, 20, 25],
+        'max_vol_threshold': [0.3, 0.35, 0.4]
     }
 
     try:
@@ -101,18 +102,25 @@ def main():
             market_data=market_df,
             rvi_data=rvi_data,
             param_grid=param_grid,
-            commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
+            commission={'EQMX': 0.0, 'OBLG': 0.0, 'GOLD': 0.0},
+#            commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
             trade_time_filter=trade_time_filter
         )
 
-        print("\n🏆 Топ-3 комбинации параметров:")
-        print(opt_results[[
+        print("\n🏆 Топ-5 комбинаций параметров:")
+        top5 = opt_results[[
             'base_lookback',
             'base_vol_window',
             'max_vol_threshold',
             'sharpe',
-            'cagr'
-        ]].head(3))
+            'cagr',
+            'max_drawdown'
+        ]].head(5)
+        print(top5.to_string(index=False))
+
+        # Сохранение результатов
+        top5.to_csv("optimization_results.csv", index=False)
+        print("\n✅ Результаты сохранены в optimization_results.csv")
 
     except Exception as e:
         print(f"❌ Ошибка при оптимизации: {e}")

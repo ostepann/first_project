@@ -60,8 +60,7 @@ def main():
     )
 
     bt = Backtester(
-        commission={'EQMX': 0.0, 'OBLG': 0.0, 'GOLD': 0.0},
-#        commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
+        commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
         default_commission=0.0,
         slippage=0.001,
         use_slippage=True,
@@ -88,13 +87,17 @@ def main():
         print(f"❌ Ошибка при бэктесте: {e}")
         return
 
-    # === ЗАПУСК ПОЛНОЙ ОПТИМИЗАЦИИ ===
-    print("\n🔍 Запуск полной оптимизации (75 комбинаций)...")
-    param_grid = {
-        'base_lookback': [5, 10, 20, 50, 100],
-        'base_vol_window': [5, 10, 15, 20, 25],
-        'max_vol_threshold': [0.3, 0.35, 0.4]
-    }
+    # === ЗАПУСК ОПТИМИЗАЦИИ ===
+    print("\n🔍 Загрузка параметров оптимизации из optimization_config.py...")
+    try:
+        from optimization_config import param_grid
+    except ImportError:
+        print("⚠️ Файл optimization_config.py не найден. Используется сетка по умолчанию.")
+        param_grid = {
+            'base_lookback': [126],
+            'base_vol_window': [20],
+            'max_vol_threshold': [0.35]
+        }
 
     try:
         opt_results = optimize_dual_momentum(
@@ -102,13 +105,12 @@ def main():
             market_data=market_df,
             rvi_data=rvi_data,
             param_grid=param_grid,
-            commission={'EQMX': 0.0, 'OBLG': 0.0, 'GOLD': 0.0},
-#            commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
+            commission={'EQMX': 0.005, 'OBLG': 0.003, 'GOLD': 0.006},
             trade_time_filter=trade_time_filter
         )
 
-        print("\n🏆 Топ-5 комбинаций параметров:")
-        top5 = opt_results[[
+        print(f"\n🏆 Найдено {len(opt_results)} комбинаций. Топ-5:")
+        top_results = opt_results[[
             'base_lookback',
             'base_vol_window',
             'max_vol_threshold',
@@ -116,10 +118,10 @@ def main():
             'cagr',
             'max_drawdown'
         ]].head(5)
-        print(top5.to_string(index=False))
+        print(top_results.to_string(index=False))
 
         # Сохранение результатов
-        top5.to_csv("optimization_results.csv", index=False)
+        top_results.to_csv("optimization_results.csv", index=False)
         print("\n✅ Результаты сохранены в optimization_results.csv")
 
     except Exception as e:

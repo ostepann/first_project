@@ -2,17 +2,17 @@
 
 import os
 import sys
+import pandas as pd
+
 _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from backtest_platform.validation.test01.test01_validation_strategy import Test01ValidationStrategy
-from core.backtester import Backtester
-from utils import load_market_data
-import pandas as pd
+from backtest_platform.strategies.dual_momentum import DualMomentumStrategy
+from backtest_platform.core.backtester import Backtester
+from backtest_platform.utils import load_market_data
 
 def main():
-    # Загрузка конфигурации
     _config_path = os.path.dirname(__file__)
     if _config_path not in sys.path:
         sys.path.insert(0, _config_path)
@@ -29,13 +29,13 @@ def main():
     rvi_data['TRADEDATE'] = pd.to_datetime(rvi_data['TRADEDATE'])
     market_df = data[cfg.market_ticker].copy()
 
-    # Стратегия
-    strategy = Test01ValidationStrategy(
-        lookback_period=2,
-        risk_free_ticker='LQDT'
+    # ИСПОЛЬЗУЕМ ПРОДУКТИВНУЮ СТРАТЕГИЮ В РЕЖИМЕ BARE MODE
+    strategy = DualMomentumStrategy(
+        base_lookback=2,
+        max_vol_threshold=1.0,
+        bare_mode=True  # ← отключает все фильтры и адаптацию
     )
 
-    # Бэктест
     bt = Backtester(
         commission=cfg.commission,
         default_commission=cfg.default_commission,
@@ -52,9 +52,8 @@ def main():
         initial_capital=cfg.initial_capital
     )
 
-    # Проверка
-    expected = 109.37  # 100 * 1.01^9 (покупка на день 2, удержание 9 дней)
-    print(f"✅ Тест 1: Выбор самого прибыльного актива")
+    expected = 109.37
+    print(f"✅ Тест 1: Выбор самого прибыльного актива (продуктивная стратегия, bare_mode)")
     print(f"Финальная стоимость: {result['final_value']:.2f}")
     print(f"Ожидаемое значение: {expected}")
 

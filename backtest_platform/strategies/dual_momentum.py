@@ -1,7 +1,7 @@
 # backtest_platform/strategies/dual_momentum.py
-from core.base_strategy import BaseStrategy
-from indicators.volatility import rolling_volatility
-from indicators.trend import detect_trend, get_trend_strength
+from backtest_platform.core.base_strategy import BaseStrategy
+from backtest_platform.indicators.volatility import rolling_volatility
+from backtest_platform.indicators.trend import detect_trend, get_trend_strength
 import pandas as pd
 import numpy as np
 

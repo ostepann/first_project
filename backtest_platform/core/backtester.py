@@ -2,36 +2,56 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 class Backtester:
     def __init__(
         self,
-        commission: Dict[str, float] = None,
+        commission: Union[Dict[str, float], float] = 0.0,
         default_commission: float = 0.0,
-        slippage: float = 0.0,
+        slippage: Union[Dict[str, float], float] = 0.0,
         use_slippage: bool = False,
-        trade_time_filter: Optional[str] = None  # например, '12:00:00'
+        trade_time_filter: Optional[str] = None
     ):
-        self.commission = commission or {}
+        self.commission = commission
         self.default_commission = default_commission
         self.slippage = slippage
         self.use_slippage = use_slippage
         self.trade_time_filter = trade_time_filter
 
+    def _get_commission(self, ticker: str) -> float:
+        """Возвращает комиссию в долях (не %!)."""
+        if isinstance(self.commission, dict):
+            return self.commission.get(ticker, self.default_commission) / 100.0
+        else:
+            return self.commission / 100.0
+
+    def _get_slippage(self, ticker: str) -> float:
+        """Возвращает проскальзывание в долях (не bps!)."""
+        if not self.use_slippage:
+            return 0.0
+        if isinstance(self.slippage, dict):
+            return self.slippage.get(ticker, 0.0) / 10_000.0
+        else:
+            return self.slippage / 10_000.0
+
     def _apply_costs(self, price: float, ticker: str, is_buy: bool) -> float:
-        comm = self.commission.get(ticker, self.default_commission)
-        adj = (1 + comm) if is_buy else (1 - comm)
-        if self.use_slippage:
-            slip = self.slippage if is_buy else -self.slippage
-            adj *= (1 + slip)
-        return price * adj
+        """
+        Применяет комиссию и проскальзывание к цене.
+        """
+        comm_frac = self._get_commission(ticker)
+        slip_frac = self._get_slippage(ticker)
+        total_cost = comm_frac + slip_frac
+
+        if is_buy:
+            return price * (1 + total_cost)
+        else:
+            return price * (1 - total_cost)
 
     def _filter_by_time(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.trade_time_filter and 'TRADEDATE' in df.columns:
             if df['TRADEDATE'].dtype == 'object':
                 df['TRADEDATE'] = pd.to_datetime(df['TRADEDATE'])
-            # Предполагаем, что TRADEDATE содержит время
             df = df[df['TRADEDATE'].dt.time == pd.Timestamp(self.trade_time_filter).time()]
         return df
 
@@ -60,13 +80,11 @@ class Backtester:
         all_dates = sorted(all_dates)
         portfolio_values = []
         trades = []
-        # Начинаем с кэша (LQDT)
         current_asset = 'LQDT'
         cash = initial_capital
         positions = {t: 0.0 for t in data_dict}
 
         for date in all_dates:
-            # Сбор данных на дату
             daily_dfs = {}
             valid = True
             for ticker, df in filtered_data.items():
@@ -79,18 +97,15 @@ class Backtester:
             if not valid or len(daily_dfs) != len(data_dict):
                 continue
 
-            # RVI на текущую дату
             current_rvi = None
             if rvi_data is not None:
                 rvi_row = rvi_data[rvi_data['TRADEDATE'] == date]
                 if not rvi_row.empty:
                     current_rvi = rvi_row
 
-            # Генерация сигнала
             signal = strategy.generate_signal(daily_dfs, market_data=market_data, rvi_data=current_rvi)
             selected = signal.get('selected', current_asset)
 
-            # Смена актива
             if selected != current_asset:
                 # Продажа старого
                 if current_asset in positions and positions[current_asset] > 0:
@@ -117,7 +132,6 @@ class Backtester:
 
                 current_asset = selected
 
-            # Оценка стоимости портфеля
             current_value = cash
             for ticker, qty in positions.items():
                 if qty > 0:
@@ -128,7 +142,6 @@ class Backtester:
                         current_value += qty * price
             portfolio_values.append({'date': date, 'value': current_value})
 
-        # Расчёт метрик
         pv_df = pd.DataFrame(portfolio_values)
         if pv_df.empty:
             return {

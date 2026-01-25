@@ -1,0 +1,61 @@
+backtest_platform/
+│   ├── __init__.py
+│   ├── __pycache__
+│   ├── backtester - Copy.py
+│   ├── backtester.py
+│   └── base_strategy.py
+│   ├── __init__.py
+│   ├── __pycache__
+│   ├── trend.py
+│   └── volatility.py
+│   ├── __init__.py
+│   ├── __pycache__
+│   └── dual_momentum.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── test01_generate_validation_data.py
+│   │   ├── test01_optimization_config_validation.py
+│   │   └── test01_run_validation.py
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── test02_generate_validation_data.py
+│   │   ├── test02_optimization_config_validation.py
+│   │   ├── test02_run_validation.py
+│   │   └── test02_validation_strategy.py
+│   │   ├── __pycache__
+│   │   ├── test03_generate_validation_data.py
+│   │   ├── test03_optimization_config_validation.py
+│   │   └── test03_run_validation.py
+│   │   ├── __pycache__
+│   │   ├── test04_generate_validation_data.py
+│   │   ├── test04_optimization_config_validation.py
+│   │   └── test04_run_validation.py
+│       ├── __pycache__
+│       ├── test05_generate_validation_data.py
+│       ├── test05_optimization_config_validation.py
+│       └── test05_run_validation.py
+│   ├── __pycache__
+│   ├── test01
+│   ├── test01_generate_validation_data.py
+│   ├── test01_optimization_config_validation.py
+│   ├── test01_run_validation.py
+│   ├── test01_run_validation_debug.py
+│   ├── test01_validation_strategy.py
+│   ├── test02
+│   ├── test03
+│   ├── test04
+│   └── test05
+    └── generate_py_tree.py
+├── __init__.py
+├── __pycache__
+├── best_lookback.py
+├── collect_moex_spreads.py
+├── core
+├── indicators
+├── optimization_config.py
+├── optimizer.py
+├── run_example.py
+├── strategies
+├── utils.py
+├── validation
+└── z-tools

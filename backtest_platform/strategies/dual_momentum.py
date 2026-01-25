@@ -3,6 +3,7 @@
 from backtest_platform.core.base_strategy import BaseStrategy
 from backtest_platform.indicators.volatility import rolling_volatility
 import pandas as pd
+import numpy as np
 
 
 class DualMomentumStrategy(BaseStrategy):
@@ -15,7 +16,9 @@ class DualMomentumStrategy(BaseStrategy):
         use_rvi_adaptation=True,
         bare_mode=False,
         rvi_high_threshold=35,          # ← НОВЫЙ параметр
-        market_vol_threshold=None       # ← НОВЫЙ параметр (если None — использовать max_vol_threshold)
+        market_vol_threshold=None,      # ← НОВЫЙ параметр (если None — использовать max_vol_threshold)
+        use_trend_filter=False,         # ← ВКЛЮЧЕНИЕ/ВЫКЛЮЧЕНИЕ трендового фильтра
+        trend_window=60                 # ← ДЛИНА окна для анализа тренда
     ):
         self.base_lookback = base_lookback
         self.base_vol_window = base_vol_window
@@ -25,6 +28,8 @@ class DualMomentumStrategy(BaseStrategy):
         self.bare_mode = bare_mode
         self.rvi_high_threshold = rvi_high_threshold
         self.market_vol_threshold = market_vol_threshold or max_vol_threshold
+        self.use_trend_filter = use_trend_filter
+        self.trend_window = trend_window
 
     def _get_rvi_level(self, rvi_value):
         if rvi_value < 15:
@@ -45,6 +50,23 @@ class DualMomentumStrategy(BaseStrategy):
                 lookback = int(lookback * 0.7)
                 vol_window = int(vol_window * 0.7)
         return {'lookback_period': lookback, 'vol_window': vol_window}
+
+    def _is_uptrend(self, prices: pd.Series, window: int) -> bool:
+        """
+        Проверяет, находится ли актив в восходящем тренде на основе наклона линейной регрессии.
+        Возвращает True, если наклон положительный.
+        """
+        if len(prices) < window:
+            # Если данных меньше, чем окно — считаем, что тренд не определён.
+            # Возвращаем True, чтобы не блокировать актив по умолчанию.
+            return True
+        x = np.arange(window)
+        y = prices.iloc[-window:].values
+        # Защита от некорректных данных
+        if np.any(np.isnan(y)) or np.any(np.isinf(y)):
+            return True
+        slope, _ = np.polyfit(x, y, 1)
+        return slope > 0
 
     def generate_signal(self, data_dict, market_data=None, rvi_data=None, **kwargs):
         # === Рыночный фильтр: если рыночная волатильность или RVI слишком высоки → выход в кэш ===
@@ -101,8 +123,19 @@ class DualMomentumStrategy(BaseStrategy):
         for ticker, df in data_dict.items():
             if ticker == self.risk_free_ticker:
                 continue
-            if len(df) < max(lookback, vol_window):
+
+            # Минимальная длина данных для всех используемых окон
+            min_required_length = max(lookback, vol_window)
+            if self.use_trend_filter:
+                min_required_length = max(min_required_length, self.trend_window)
+
+            if len(df) < min_required_length:
                 continue
+
+            # === Трендовый фильтр (опционально) ===
+            if self.use_trend_filter:
+                if not self._is_uptrend(df['CLOSE'], self.trend_window):
+                    continue  # Пропускаем актив, если он не в uptrend
 
             # Momentum
             lookback_price = df['CLOSE'].iloc[-lookback]

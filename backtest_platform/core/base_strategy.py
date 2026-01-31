@@ -1,3 +1,5 @@
+# backtest_platform/core/base_strategy.py
+
 from abc import ABC, abstractmethod
 
 class BaseStrategy(ABC):

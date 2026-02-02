@@ -1,33 +1,30 @@
 # backtest_platform/stepwise_optimization.py
+
 """
 Скрипт для пошаговой оптимизации параметров стратегии Dual Momentum.
-Версия: 1.0.0
-Цель: Минимизировать количество тестов при поиске оптимальных параметров.
+Версия: 1.1.0 (с поддержкой диагностики рыночного фильтра)
 """
 
 import os
 import sys
 import pandas as pd
 
-# Метаданные модуля
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Oleg Dev"
-__date__ = "2026-02-01"
+__date__ = "2026-02-02"
 
-# Настройка пути к корню проекта
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from core.backtester import Backtester
 from strategies.dual_momentum import DualMomentumStrategy
-from optimizer import optimize_dual_momentum # Импортируем функцию оптимизации
+from optimizer import optimize_dual_momentum
 from utils import load_market_data
-import optimization_config as cfg # Импортируем вашу конфигурацию
+import optimization_config as cfg
 
 
 def load_all_data():
-    """Загружает все необходимые данные, как в run_example.py."""
     data_dir = os.path.join(project_root, cfg.data_dir)
     data = {}
     print("Загрузка данных из CSV...")
@@ -42,7 +39,6 @@ def load_all_data():
         data[ticker] = df
         print(f"✅ {ticker}: {df['TRADEDATE'].min().date()} → {df['TRADEDATE'].max().date()} ({len(df)} строк)")
 
-    # Загрузка RVI
     rvi_path = os.path.join(data_dir, f'{cfg.rvi_ticker}.csv')
     rvi_data = None
     if os.path.exists(rvi_path):
@@ -57,28 +53,17 @@ def load_all_data():
 
 
 def run_stepwise_optimization(temp_param_grid, step_name):
-    """
-    Запускает оптимизацию с заданной временной сеткой параметров.
-    
-    Args:
-        temp_param_grid (dict): Временная сетка для оптимизации (например, temp_grid_step1).
-        step_name (str): Название шага для логгирования и сохранения результатов.
-    """
     print(f"\n🚀 ЗАПУСК ОПТИМИЗАЦИИ: {step_name}")
-    # Рассчитываем количество комбинаций
     from itertools import product
     total_combinations = len(list(product(*temp_param_grid.values())))
     print(f"⚙️  Количество комбинаций: {total_combinations}")
 
-    # Загрузка данных
     data, market_df, rvi_data = load_all_data()
 
-    # Определяем, есть ли в данных время или только дата
     has_time = data[cfg.tickers[0]]['TRADEDATE'].iloc[0].time() != pd.Timestamp('00:00:00').time()
     trade_time_filter = cfg.trading_start_time if has_time and cfg.time_filter_enabled else None
 
     try:
-        # Запуск оптимизации
         results_df = optimize_dual_momentum(
             data_dict=data,
             market_data=market_df,
@@ -87,39 +72,51 @@ def run_stepwise_optimization(temp_param_grid, step_name):
             commission=cfg.commission,
             initial_capital=cfg.initial_capital,
             trade_time_filter=trade_time_filter
-            # ⚠️ БОЛЬШЕ НЕ НУЖНО ПЕРЕДАВАТЬ: default_commission, slippage, use_slippage
         )
 
-        # Сортировка и вывод лучших результатов
+        # 🔑 ДИАГНОСТИКА: Проверка влияния market_vol_window
+        if 'market_vol_window' in results_df.columns and len(results_df) > 1:
+            unique_windows = results_df['market_vol_window'].nunique()
+            if unique_windows > 1:
+                # Группируем по комбинации других параметров
+                group_cols = [col for col in results_df.columns if col not in ['market_vol_window', 'cagr', 'sharpe', 'max_drawdown', 'final_value']]
+                grouped = results_df.groupby(group_cols)['sharpe'].nunique()
+                if (grouped > 1).any():
+                    print(f"✅ Параметр market_vol_window ВЛИЯЕТ на результаты (обнаружены различия в Sharpe для одинаковых комбинаций других параметров)")
+                else:
+                    print(f"⚠️  Внимание: для всех комбинаций других параметров Sharpe одинаков при разных market_vol_window. "
+                          f"Возможно, рыночный фильтр не срабатывает в вашем периоде данных.")
+            else:
+                print(f"ℹ️  Тестирование проводилось с фиксированным market_vol_window={results_df['market_vol_window'].iloc[0]}")
+
         top_results = results_df.sort_values('sharpe', ascending=False).head(5)
         print(f"\n🏆 Топ-5 результатов для '{step_name}':")
-        print(top_results.to_string(index=False))
+        display_cols = ['base_lookback', 'base_vol_window', 'market_vol_window', 'cagr', 'sharpe', 'max_drawdown']
+        display_cols = [c for c in display_cols if c in top_results.columns]
+        print(top_results[display_cols].to_string(index=False))
 
-        # Сохранение полных результатов
         output_file = f"optimization_results_{step_name.lower().replace(' ', '_')}.csv"
         results_df.to_csv(output_file, index=False)
         print(f"\n✅ Результаты сохранены в '{output_file}'")
 
-        # Возвращаем лучшие параметры для следующего шага
         best_params = top_results.iloc[0].to_dict()
-        # Удаляем служебные столбцы метрик, оставляя только параметры стратегии
-        for metric in ['final_value', 'cagr', 'sharpe', 'max_drawdown']:
+        for metric in ['final_value', 'cagr', 'sharpe', 'max_drawdown', 'used_market_vol_window']:
             best_params.pop(metric, None)
         return best_params
 
     except Exception as e:
         print(f"❌ Ошибка при оптимизации: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
 if __name__ == "__main__":
-    # === ШАГ 1: Оптимизация окон анализа ===
+    # === ШАГ 1: Оптимизация окон анализа С ПОЛНЫМ ДИАПАЗОНОМ market_vol_window ===
     temp_grid_step1 = {
         'base_lookback': [28, 29],
-        'market_vol_window': [10],  #, 40, 50, 60, 70, 80, 90, 100, 110, 120],
-        'base_vol_window': [7, 8, 9], # Зафиксировано
-        
-        # Все остальные параметры берутся из production_params
+        'market_vol_window': [10, 21, 40, 60, 80, 100, 120],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
+        'base_vol_window': [7, 8, 9],
         'max_vol_threshold': [cfg.production_params['max_vol_threshold']],
         'market_vol_threshold': [cfg.production_params['market_vol_threshold']],
         'rvi_high_exit_threshold': [cfg.production_params['rvi_high_exit_threshold']],
@@ -132,11 +129,11 @@ if __name__ == "__main__":
         'trend_window': [cfg.production_params['trend_window']],
         'trend_filter_on_insufficient_data': [cfg.production_params['trend_filter_on_insufficient_data']],
         'bare_mode': [cfg.production_params['bare_mode']],
-        'risk_free_ticker': [cfg.production_params['risk_free_ticker']]
+        'risk_free_ticker': [cfg.production_params['risk_free_ticker']],
+        'debug': [False]  # ← Отключено по умолчанию (включить True для диагностики)
     }
 
     best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_1_Windows")
     
     if best_params_step1:
         print(f"\n✨ Лучшие параметры после Шага 1:\n{best_params_step1}")
-        # Здесь вы можете обновить cfg.production_params или создать новый словарь для следующего шага

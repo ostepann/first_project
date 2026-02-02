@@ -1,15 +1,29 @@
 # backtest_platform/optimizer.py
 
+"""
+Оптимизатор для стратегии Dual Momentum.
+Версия: 1.1.0
+Изменения:
+- Импорт настроек из optimization_config для единой точки управления издержками.
+- Поддержка полной конфигурации проскальзывания и комиссий.
+"""
+
 import itertools
 import pandas as pd
 from core.backtester import Backtester
+import optimization_config as cfg  # ← ДОБАВЛЕН ИМПОРТ
+
+# Метаданные модуля
+__version__ = "1.1.0"
+__author__ = "Oleg Dev"
+__date__ = "2026-02-01"
 
 def optimize_dual_momentum(
     data_dict,
     market_data,
     rvi_data=None,
     param_grid=None,
-    commission=None,
+    commission=None,  # ← Этот аргумент всё ещё можно передавать для гибкости
     initial_capital=100_000,
     trade_time_filter=None
 ):
@@ -21,7 +35,7 @@ def optimize_dual_momentum(
         market_data: pd.DataFrame, рыночные данные (например, EQMX)
         rvi_data: pd.DataFrame, данные RVI (опционально)
         param_grid: dict, параметры для оптимизации
-        commission: dict, комиссия по инструментам
+        commission: dict, комиссия по инструментам (если None, берётся из конфига)
         initial_capital: float, стартовый капитал
         trade_time_filter: str, например '12:00:00'
     
@@ -45,11 +59,13 @@ def optimize_dual_momentum(
     for combo in itertools.product(*values):
         params = dict(zip(keys, combo))
         strategy = DualMomentumStrategy(**params)
+        
+        # 🔑 Теперь все настройки издержек берутся из единого источника — cfg
         bt = Backtester(
-            commission=commission or {},
-            default_commission=0.0,
-            slippage=0.001,
-            use_slippage=True,
+            commission=commission or cfg.commission,
+            default_commission=cfg.default_commission,
+            slippage=cfg.slippage,
+            use_slippage=cfg.use_slippage,
             trade_time_filter=trade_time_filter
         )
         try:
@@ -68,8 +84,6 @@ def optimize_dual_momentum(
                 'max_drawdown': res['max_drawdown']
             })
         except Exception as e:
-            # Для отладки можно раскомментировать:
-            # print(f"Пропущена комбинация {params}: {str(e)}")
             continue
 
     if not results:

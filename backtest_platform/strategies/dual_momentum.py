@@ -57,6 +57,10 @@ class DualMomentumStrategy(BaseStrategy):
         self.base_lookback = base_lookback
         self.base_vol_window = base_vol_window
         self.market_vol_window = market_vol_window or base_vol_window
+        
+        # 🔍 ДИАГНОСТИКА ШАГ 1.1 — ДОБАВИТЬ ЭТУ СТРОКУ:
+        # print(f"INIT: market_vol_window={self.market_vol_window}, base_vol_window={self.base_vol_window}")
+        
         self.max_vol_threshold = max_vol_threshold
         self.risk_free_ticker = risk_free_ticker
         self.use_rvi_adaptation = use_rvi_adaptation
@@ -126,6 +130,15 @@ class DualMomentumStrategy(BaseStrategy):
         return slope > 0
 
     def market_filter(self, market_data: pd.DataFrame, rvi_data: pd.DataFrame) -> dict:
+
+        # 🔍 РАСШИРЕННАЯ ДИАГНОСТИКА — ЗАМЕНИТЕ СТАРЫЙ ПРИНТ НА ЭТОТ:
+        # if not hasattr(self, '_filter_debug_count'):
+        #     self._filter_debug_count = 0
+        # self._filter_debug_count += 1
+        # if self._filter_debug_count <= 5 or self._filter_debug_count % 100 == 0:  # Первые 5 + каждый 100-й день
+        #     print(f"FILTER[{self._filter_debug_count:4d}]: market_vol_window={self.market_vol_window}, "
+        #         f"market_data_len={len(market_data) if market_data is not None else 0}")
+
         """
         ДВУХЭТАПНЫЙ рыночный фильтр с КОРРЕКТНЫМ использованием market_vol_window.
         
@@ -203,6 +216,13 @@ class DualMomentumStrategy(BaseStrategy):
         vol_info = f"волатильность={result['market_vol']:.2%} < {self.market_vol_threshold:.2%}" if result['market_vol'] is not None else "волатильность недоступна"
         
         result['rationale'] = f"Фильтр пройден: {rvi_info}, {vol_info} → разрешена торговля"
+     
+         # ДОБАВИТЬ ПЕРЕД ВОЗВРАТОМ РЕЗУЛЬТАТА:
+        # if self._filter_debug_count <= 5 or self._filter_debug_count % 100 == 0:
+        #     print(f"  → triggered={result['triggered']}, stage={result['stage']}, "
+        #         f"market_vol={result['market_vol']:.4f} if available, "
+        #         f"used_window={result.get('used_vol_window', 'N/A')}")
+     
         return result
 
     def _get_trading_logic(self, windows: dict) -> TradingLogic:

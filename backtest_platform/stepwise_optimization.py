@@ -112,10 +112,11 @@ def run_stepwise_optimization(temp_param_grid, step_name):
 
 
 if __name__ == "__main__":
+
     # === ШАГ 1: Оптимизация окон анализа С ПОЛНЫМ ДИАПАЗОНОМ market_vol_window ===
     temp_grid_step1 = {
         'base_lookback': [28, 29],
-        'market_vol_window': [10, 21, 40, 60, 80, 100, 120],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
+        'market_vol_window': [21],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
         'base_vol_window': [7, 8, 9],
         'max_vol_threshold': [cfg.production_params['max_vol_threshold']],
         'market_vol_threshold': [cfg.production_params['market_vol_threshold']],
@@ -134,6 +135,6 @@ if __name__ == "__main__":
     }
 
     best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_1_Windows")
-    
+
     if best_params_step1:
         print(f"\n✨ Лучшие параметры после Шага 1:\n{best_params_step1}")

@@ -1,0 +1,4 @@
+base_lookback,market_vol_window,base_vol_window,market_vol_threshold,max_vol_threshold,rvi_high_exit_threshold,rvi_low_threshold,rvi_medium_threshold,rvi_low_multiplier,rvi_high_multiplier,use_rvi_adaptation,use_trend_filter,trend_window,trend_filter_on_insufficient_data,bare_mode,risk_free_ticker,debug,final_value,cagr,sharpe,max_drawdown
+28,21,9,0.35,0.3,35,15,25,1.2,0.7,True,True,60,allow,False,LQDT,False,2889632.761615366,0.4338842067047741,3.4600002985817673,-0.08252142460798473
+28,21,9,0.4,0.3,35,15,25,1.2,0.7,True,True,60,allow,False,LQDT,False,2889632.761615366,0.4338842067047741,3.4600002985817673,-0.08252142460798473
+28,21,9,0.3,0.3,35,15,25,1.2,0.7,True,True,60,allow,False,LQDT,False,1000000.0,0.0,0.0,0.0

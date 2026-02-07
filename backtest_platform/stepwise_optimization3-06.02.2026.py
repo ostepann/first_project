@@ -1,8 +1,8 @@
-# backtest_platform/stepwise_optimization.py
+# backtest_platform/stepwise_optimization3.py
 
 """
 Скрипт для пошаговой оптимизации параметров стратегии Dual Momentum.
-Версия: 1.2.0 (с поддержкой диагностики рыночного фильтра)
+Версия: 1.2.0 (исправлен порядок импортов)
 """
 
 import os
@@ -11,17 +11,26 @@ import pandas as pd
 
 __version__ = "1.2.0"
 __author__ = "Oleg Dev"
-__date__ = "2026-02-08"
+__date__ = "2026-02-07"
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# 🔑 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: сначала добавляем корень в sys.path
+# project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# if project_root not in sys.path:
+#     sys.path.insert(0, project_root)
+#     print(f"✅ Корень проекта добавлен в sys.path: {project_root}")
 
-from core.backtester import Backtester
-from strategies.dual_momentum import DualMomentumStrategy
-from optimizer import optimize_dual_momentum
-from utils import load_market_data
-import optimization_config as cfg
+# ← ИМПОРТЫ ПЕРЕМЕЩЕНЫ СЮДА (после добавления в sys.path)
+# from core.backtester import Backtester
+# from strategies.dual_momentum import DualMomentumStrategy
+# from optimizer import optimize_dual_momentum
+# from utils import load_market_data
+# import optimization_config as cfg
+
+from backtest_platform.core.backtester import Backtester
+from backtest_platform.strategies.dual_momentum import DualMomentumStrategy
+from backtest_platform.optimizer import optimize_dual_momentum
+from backtest_platform.utils import load_market_data
+import backtest_platform.optimization_config as cfg  # ← Обратите внимание на полный путь!
 
 
 def load_all_data():
@@ -78,7 +87,6 @@ def run_stepwise_optimization(temp_param_grid, step_name):
         if 'market_vol_window' in results_df.columns and len(results_df) > 1:
             unique_windows = results_df['market_vol_window'].nunique()
             if unique_windows > 1:
-                # Группируем по комбинации других параметров
                 group_cols = [col for col in results_df.columns if col not in ['market_vol_window', 'cagr', 'sharpe', 'max_drawdown', 'final_value']]
                 grouped = results_df.groupby(group_cols)['sharpe'].nunique()
                 if (grouped > 1).any():
@@ -95,8 +103,9 @@ def run_stepwise_optimization(temp_param_grid, step_name):
         display_cols = [c for c in display_cols if c in top_results.columns]
         print(top_results[display_cols].to_string(index=False))
 
-        output_dir = os.path.join(project_root, "data-optimization")
-        os.makedirs(output_dir, exist_ok=True)
+        # ← ИЗМЕНЕНО: Сохранение в целевую директорию
+        output_dir = os.path.join(project_root, "first_project", "data-optimization")
+        os.makedirs(output_dir, exist_ok=True)  # ← ИЗМЕНЕНО: гарантируем существование папки
         output_file = os.path.join(output_dir, f"optimization_results_{step_name.lower().replace(' ', '_')}.csv")
         results_df.to_csv(output_file, index=False)
         print(f"\n✅ Результаты сохранены в '{output_file}'")
@@ -115,21 +124,21 @@ def run_stepwise_optimization(temp_param_grid, step_name):
 
 if __name__ == "__main__":
 
-    # === ШАГ 1: Оптимизация окон анализа С ПОЛНЫМ ДИАПАЗОНОМ market_vol_window ===
     temp_grid_step1 = {
         'base_lookback': [28],
         'market_vol_window': [21], # 10, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
         'base_vol_window': [9],
 
-        # === ШАГ 2:🔑 ОПТИМИЗИРУЕМ ПОРОГИ (ГОДОВЫЕ ЗНАЧЕНИЯ БЕЗ КОНВЕРТАЦИИ!):
-        'market_vol_threshold': [0.30, 0.35, 0.40],  # 25%, 30%, 35% годовых
+        'market_vol_threshold': [0.35], #0.30, 0.40],  # 25%, 30%, 35% годовых
         'max_vol_threshold': [0.30], # лучшие значения для 0.29-0.32     # 50%, 60%, 70% годовых
 
-        'rvi_high_exit_threshold': [cfg.production_params['rvi_high_exit_threshold']],
-        'rvi_low_threshold': [cfg.production_params['rvi_low_threshold']],
-        'rvi_medium_threshold': [cfg.production_params['rvi_medium_threshold']],
-        'rvi_low_multiplier': [cfg.production_params['rvi_low_multiplier']],
-        'rvi_high_multiplier': [cfg.production_params['rvi_high_multiplier']],
+        # === ШАГ 3:🔑 ОПТИМИЗИРУЕМ RVI-ПАРАМЕТРЫ:
+        'rvi_high_exit_threshold': [30, 35, 40],      # Порог экстренного выхода
+        'rvi_low_threshold': [10, 15, 20],            # Нижний порог "низкой" волатильности
+        'rvi_medium_threshold': [20, 25, 30],         # Порог "средней" волатильности
+        'rvi_low_multiplier': [1.1, 1.2, 1.3],        # Увеличение окон при низкой воле
+        'rvi_high_multiplier': [0.6, 0.7, 0.8],       # Сокращение окон при высокой воле
+
         'use_rvi_adaptation': [cfg.production_params['use_rvi_adaptation']],
         'use_trend_filter': [cfg.production_params['use_trend_filter']],
         'trend_window': [cfg.production_params['trend_window']],
@@ -139,7 +148,7 @@ if __name__ == "__main__":
         'debug': [False]  # ← Отключено по умолчанию (включить True для диагностики)
     }
 
-    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_2_Windows")
+    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_3_Windows")
 
     if best_params_step1:
         print(f"\n✨ Лучшие параметры после Шага 1:\n{best_params_step1}")

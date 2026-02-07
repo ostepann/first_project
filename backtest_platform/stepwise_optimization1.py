@@ -95,7 +95,11 @@ def run_stepwise_optimization(temp_param_grid, step_name):
         display_cols = [c for c in display_cols if c in top_results.columns]
         print(top_results[display_cols].to_string(index=False))
 
-        output_file = f"optimization_results_{step_name.lower().replace(' ', '_')}.csv"
+#        output_file = f"optimization_results_{step_name.lower().replace(' ', '_')}.csv"
+        output_dir = os.path.join(project_root, "data-optimization")
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = os.path.join(output_dir, f"optimization_results_{step_name.lower().replace(' ', '_')}.csv")
+
         results_df.to_csv(output_file, index=False)
         print(f"\n✅ Результаты сохранены в '{output_file}'")
 

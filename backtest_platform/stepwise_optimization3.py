@@ -115,21 +115,27 @@ def run_stepwise_optimization(temp_param_grid, step_name):
 
 if __name__ == "__main__":
 
-    # === ШАГ 1: Оптимизация окон анализа С ПОЛНЫМ ДИАПАЗОНОМ market_vol_window ===
     temp_grid_step1 = {
         'base_lookback': [28],
         'market_vol_window': [21], # 10, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
         'base_vol_window': [9],
 
-        # === ШАГ 2:🔑 ОПТИМИЗИРУЕМ ПОРОГИ (ГОДОВЫЕ ЗНАЧЕНИЯ БЕЗ КОНВЕРТАЦИИ!):
-        'market_vol_threshold': [0.30, 0.35, 0.40],  # 25%, 30%, 35% годовых
+        'market_vol_threshold': [0.35],  #, 0.30, 0.40],  # 25%, 30%, 35% годовых
         'max_vol_threshold': [0.30], # лучшие значения для 0.29-0.32     # 50%, 60%, 70% годовых
 
-        'rvi_high_exit_threshold': [cfg.production_params['rvi_high_exit_threshold']],
-        'rvi_low_threshold': [cfg.production_params['rvi_low_threshold']],
-        'rvi_medium_threshold': [cfg.production_params['rvi_medium_threshold']],
-        'rvi_low_multiplier': [cfg.production_params['rvi_low_multiplier']],
-        'rvi_high_multiplier': [cfg.production_params['rvi_high_multiplier']],
+        # === ШАГ 3:🔑 ОПТИМИЗИРУЕМ параметры RVI-адаптации:
+#        'rvi_high_exit_threshold': [cfg.production_params['rvi_high_exit_threshold']],
+#        'rvi_low_threshold': [cfg.production_params['rvi_low_threshold']],
+#        'rvi_medium_threshold': [cfg.production_params['rvi_medium_threshold']],
+#        'rvi_low_multiplier': [cfg.production_params['rvi_low_multiplier']],
+#        'rvi_high_multiplier': [cfg.production_params['rvi_high_multiplier']],
+
+        'rvi_high_exit_threshold': [42], # 36, 41, 45],    # 95-й перцентиль + кризисный буфер
+        'rvi_low_threshold': [14], # 10, 11, 12, 13],          # Нижний квартиль + буфер (-2/+2)
+        'rvi_medium_threshold': [25], # 24, 25, 27, 28], #26, 28],       # Медиана + зазор ≥8 пунктов от low_threshold
+        'rvi_low_multiplier': [1.2], #1.20, 1.25],   # Умеренное удлинение (макс. +25%)
+        'rvi_high_multiplier': [0.73], #0.72, 0.73, 0.74], #0.70, 0.75],  # Сбалансированное сокращение (мин. -35%)
+
         'use_rvi_adaptation': [cfg.production_params['use_rvi_adaptation']],
         'use_trend_filter': [cfg.production_params['use_trend_filter']],
         'trend_window': [cfg.production_params['trend_window']],
@@ -139,7 +145,7 @@ if __name__ == "__main__":
         'debug': [False]  # ← Отключено по умолчанию (включить True для диагностики)
     }
 
-    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_2_Windows")
+    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_3_Windows")
 
     if best_params_step1:
         print(f"\n✨ Лучшие параметры после Шага 1:\n{best_params_step1}")

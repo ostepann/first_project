@@ -1,4 +1,4 @@
-# backtest_platform/stepwise_optimization.py
+# backtest_platform/stepwise_optimization3.py
 
 """
 Скрипт для пошаговой оптимизации параметров стратегии Dual Momentum.
@@ -53,6 +53,7 @@ def load_all_data():
 
 
 def run_stepwise_optimization(temp_param_grid, step_name):
+
     print(f"\n🚀 ЗАПУСК ОПТИМИЗАЦИИ: {step_name}")
     from itertools import product
     total_combinations = len(list(product(*temp_param_grid.values())))
@@ -73,6 +74,8 @@ def run_stepwise_optimization(temp_param_grid, step_name):
             initial_capital=cfg.initial_capital,
             trade_time_filter=trade_time_filter
         )
+
+
 
         # 🔑 ДИАГНОСТИКА: Проверка влияния market_vol_window
         if 'market_vol_window' in results_df.columns and len(results_df) > 1:
@@ -116,7 +119,7 @@ def run_stepwise_optimization(temp_param_grid, step_name):
 if __name__ == "__main__":
 
     temp_grid_step1 = {
-        'base_lookback': [28],
+        'base_lookback': [29],
         'market_vol_window': [21], # 10, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
         'base_vol_window': [9],
 
@@ -130,11 +133,11 @@ if __name__ == "__main__":
 #        'rvi_low_multiplier': [cfg.production_params['rvi_low_multiplier']],
 #        'rvi_high_multiplier': [cfg.production_params['rvi_high_multiplier']],
 
-        'rvi_high_exit_threshold': [42], # 36, 41, 45],    # 95-й перцентиль + кризисный буфер
-        'rvi_low_threshold': [14], # 10, 11, 12, 13],          # Нижний квартиль + буфер (-2/+2)
-        'rvi_medium_threshold': [25], # 24, 25, 27, 28], #26, 28],       # Медиана + зазор ≥8 пунктов от low_threshold
-        'rvi_low_multiplier': [1.2], #1.20, 1.25],   # Умеренное удлинение (макс. +25%)
-        'rvi_high_multiplier': [0.73], #0.72, 0.73, 0.74], #0.70, 0.75],  # Сбалансированное сокращение (мин. -35%)
+        'rvi_high_exit_threshold': [36], # 36, 41, 45],    лучший 36 # 95-й перцентиль + кризисный буфер
+        'rvi_low_threshold': [19], # 16, 17],         лучший 19 # Нижний квартиль + буфер (-2/+2)
+        'rvi_medium_threshold': [25], # 24, 25, 27, 28], #26, 28],    лучший 25    # Медиана + зазор ≥8 пунктов от low_threshold
+        'rvi_low_multiplier': [1.2], #1.20, 1.25],  лучший 1.2 # Умеренное удлинение (макс. +25%)
+        'rvi_high_multiplier': [0.71], #0.72, 0.73, 0.74], #0.70, 0.75], лучший 0.73  # Сбалансированное сокращение (мин. -35%)
 
         'use_rvi_adaptation': [cfg.production_params['use_rvi_adaptation']],
         'use_trend_filter': [cfg.production_params['use_trend_filter']],

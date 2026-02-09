@@ -1,4 +1,4 @@
-# backtest_platform/stepwise_optimization.py
+# backtest_platform/stepwise_optimization1.py
 
 """
 Скрипт для пошаговой оптимизации параметров стратегии Dual Momentum.
@@ -119,9 +119,9 @@ if __name__ == "__main__":
 
     # === ШАГ 1: Оптимизация окон анализа С ПОЛНЫМ ДИАПАЗОНОМ market_vol_window ===
     temp_grid_step1 = {
-        'base_lookback': [28, 29],
-        'market_vol_window': [21],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ
-        'base_vol_window': [7, 8, 9],
+        'base_lookback': [28, 29, 30, 31, 32],  #Лучшие [29]
+        'market_vol_window': [21],  # ← ПОЛНЫЙ ДИАПАЗОН ДЛЯ ТЕСТИРОВАНИЯ. Лучший 21
+        'base_vol_window': [7, 8, 9, 10], # Лучшие [9]
         'max_vol_threshold': [cfg.production_params['max_vol_threshold']],
         'market_vol_threshold': [cfg.production_params['market_vol_threshold']],
         'rvi_high_exit_threshold': [cfg.production_params['rvi_high_exit_threshold']],

@@ -140,7 +140,8 @@ if __name__ == "__main__":
         'rvi_high_multiplier': [0.71], #0.72, 0.73, 0.74], #0.70, 0.75], лучший 0.73  # Сбалансированное сокращение (мин. -35%)
 
         'use_rvi_adaptation': [cfg.production_params['use_rvi_adaptation']],
-        'use_trend_filter': [cfg.production_params['use_trend_filter']],
+#        'use_trend_filter': [cfg.production_params['use_trend_filter']],
+        'use_trend_filter': [True, False],
         'trend_window': [cfg.production_params['trend_window']],
         'trend_filter_on_insufficient_data': [cfg.production_params['trend_filter_on_insufficient_data']],
         'bare_mode': [cfg.production_params['bare_mode']],

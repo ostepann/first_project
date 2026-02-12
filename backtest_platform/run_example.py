@@ -1,8 +1,6 @@
-# backtest_platform/run_example.py
-
 """
 Основной скрипт для запуска бэктеста с production-параметрами.
-Версия: 2.1.0 (с диагностикой рыночного фильтра)
+Версия: 2.2.2 (фильтрация неподдерживаемых параметров стратегии)
 """
 
 import os
@@ -10,9 +8,9 @@ import sys
 import pandas as pd
 from itertools import product
 
-__version__ = "2.1.0"
+__version__ = "2.2.2"
 __author__ = "Oleg Dev"
-__date__ = "2026-02-02"
+__date__ = "2026-02-13"
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
@@ -21,18 +19,62 @@ if project_root not in sys.path:
 from core.backtester import Backtester
 from strategies.dual_momentum import DualMomentumStrategy
 from utils import load_market_data
-import optimization_config as cfg
+
+# 🔑 ИМПОРТ ИЗ МОДУЛЬНОЙ СИСТЕМЫ КОНФИГУРАЦИИ
+from config import (
+    data_dir, tickers, market_ticker, rvi_ticker,
+    commission, default_commission, slippage, use_slippage,
+    trading_start_time, time_filter_enabled, initial_capital,
+    production_params,
+    param_grid,
+    CRITICAL_WARNING_COMMON, CRITICAL_WARNING_PRODUCTION
+)
+
+
+def filter_strategy_params(params: dict) -> dict:
+    """
+    Фильтрация параметров перед передачей в конструктор DualMomentumStrategy.
+    
+    Удаляет параметры, которые используются ТОЛЬКО для анализа/отчётов,
+    но не принимаются основным конструктором стратегии.
+    
+    Неподдерживаемые параметры:
+      • trend_r_squared_threshold — используется только в функции detect_trend() 
+        для отчётов и исследований, НЕ в основном цикле стратегии
+      • version — метаданные конфигурации, не параметр стратегии
+      • Любые другие служебные поля из production_metadata
+    """
+    unsupported_keys = [
+        'trend_r_squared_threshold',  # Только для отчётов тренда
+        'version',                    # Метаданные конфигурации
+        'expected_metrics',           # Метаданные
+        'critical_fixes',             # Метаданные
+        'optimization_method',        # Метаданные
+        'validation_folds',           # Метаданные
+        'primary_metric',             # Метаданные
+        'constraints'                 # Метаданные
+    ]
+    
+    # Создаём копию и удаляем неподдерживаемые ключи
+    filtered = {k: v for k, v in params.items() if k not in unsupported_keys}
+    
+    # Дополнительная проверка: удаляем все ключи, начинающиеся с '_'
+    filtered = {k: v for k, v in filtered.items() if not k.startswith('_')}
+    
+    return filtered
 
 
 def main():
-    import optimization_config as cfg
-
+    # === КРИТИЧЕСКИЕ ПРЕДУПРЕЖДЕНИЯ ПРИ ЗАПУСКЕ ===
+    print(f"\n⚠️  {CRITICAL_WARNING_COMMON}")
+    print(f"⚠️  {CRITICAL_WARNING_PRODUCTION}")
+    
     # === ЗАГРУЗКА ДАННЫХ ===
-    data_dir = os.path.join(project_root, cfg.data_dir)
+    data_path = os.path.join(project_root, data_dir)
     data = {}
-    print("Загрузка данных из CSV...")
-    for ticker in cfg.tickers:
-        file_path = os.path.join(data_dir, f'{ticker}.csv')
+    print("\n📥 ЗАГРУЗКА ДАННЫХ ИЗ CSV...")
+    for ticker in tickers:
+        file_path = os.path.join(data_path, f'{ticker}.csv')
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"❌ Файл не найден: {file_path}")
         df = load_market_data(file_path)
@@ -42,24 +84,24 @@ def main():
         data[ticker] = df
         print(f"✅ {ticker}: {df['TRADEDATE'].min().date()} → {df['TRADEDATE'].max().date()} ({len(df)} строк)")
 
-    rvi_path = os.path.join(data_dir, f'{cfg.rvi_ticker}.csv')
+    rvi_path = os.path.join(data_path, f'{rvi_ticker}.csv')
     rvi_data = None
     if os.path.exists(rvi_path):
         rvi_data = load_market_data(rvi_path)
         rvi_data['TRADEDATE'] = pd.to_datetime(rvi_data['TRADEDATE'])
-        print(f"✅ {cfg.rvi_ticker} загружен: {rvi_data['TRADEDATE'].min().date()} → {rvi_data['TRADEDATE'].max().date()}")
+        print(f"✅ {rvi_ticker} загружен: {rvi_data['TRADEDATE'].min().date()} → {rvi_data['TRADEDATE'].max().date()}")
     else:
-        print(f"⚠️ {cfg.rvi_ticker}.csv не найден — используется средний уровень волатильности")
+        print(f"⚠️ {rvi_ticker}.csv не найден — используется средний уровень волатильности")
 
-    market_df = data[cfg.market_ticker].copy()
+    market_df = data[market_ticker].copy()
 
     # === ДИАГНОСТИКА ВОЛАТИЛЬНОСТИ ===
     from backtest_platform.indicators.volatility import rolling_volatility
     market_returns = market_df['CLOSE'].pct_change().dropna()
-    vol_series = rolling_volatility(market_returns, cfg.production_params['market_vol_window'])
+    vol_series = rolling_volatility(market_returns, production_params['market_vol_window'])
 
-    print(f"\n🔍 ДИАГНОСТИКА ВОЛАТИЛЬНОСТИ РЫНКА ({cfg.market_ticker}):")
-    print(f"  Окно расчёта: {cfg.production_params['market_vol_window']} дней")
+    print(f"\n🔍 ДИАГНОСТИКА ВОЛАТИЛЬНОСТИ РЫНКА ({market_ticker}):")
+    print(f"  Окно расчёта: {production_params['market_vol_window']} дней")
     print(f"  Мин. волатильность: {vol_series.min():.4f} ({vol_series.min():.2%})")
     print(f"  Макс. волатильность: {vol_series.max():.4f} ({vol_series.max():.2%})")
     print(f"  Средняя волатильность: {vol_series.mean():.4f} ({vol_series.mean():.2%})")
@@ -67,14 +109,14 @@ def main():
     print(f"  ⚠️  Минимальное окно для стабильного расчёта: 5 дней")
 
     # === ФИЛЬТР ПО ВРЕМЕНИ ===
-    has_time = data[cfg.tickers[0]]['TRADEDATE'].iloc[0].time() != pd.Timestamp('00:00:00').time()
-    trade_time_filter = cfg.trading_start_time if has_time and cfg.time_filter_enabled else None
+    has_time = data[tickers[0]]['TRADEDATE'].iloc[0].time() != pd.Timestamp('00:00:00').time()
+    trade_time_filter = trading_start_time if has_time and time_filter_enabled else None
     if trade_time_filter:
         print(f"⏳ Применён фильтр по времени: {trade_time_filter}")
     else:
         print("📅 Данные дневные — фильтр по времени отключён")
 
-    # === ТЕСТ РЫНОЧНОГО ФИЛЬТРА С РАЗНЫМИ ОКНАМИ ===
+    # === ТЕСТ РЫНОЧНОГО ФИЛЬТРА С РАЗНЫМИ ОКНАМИ (С ЗАЩИТОЙ ОТ ОШИБОК) ===
     print("\n🧪 ТЕСТ РЫНОЧНОГО ФИЛЬТРА С РАЗНЫМИ ЗНАЧЕНИЯМИ market_vol_window:")
     test_windows = [10, 21, 40, 60, 80, 100, 120]
     for window in test_windows:
@@ -86,18 +128,36 @@ def main():
             debug=False
         )
         filter_result = strategy.market_filter(market_df, rvi_data)
-        status = "✅ СРАБОТАЛ" if filter_result['triggered'] else "❌ НЕ СРАБОТАЛ"
+        status = "✅ СРАБОТАЛ" if filter_result.get('triggered', False) else "❌ НЕ СРАБОТАЛ"
+        
+        # 🔑 ЗАЩИТА ОТ ОШИБКИ: безопасное форматирование при отсутствии данных
         used_win = filter_result.get('used_vol_window', 'N/A')
-        print(f"  market_vol_window={window:3d} → {status} | использовано окно={used_win:3d} | волатильность={filter_result['market_vol']:.2%} если доступна")
+        used_win_str = f"{used_win:3d}" if isinstance(used_win, int) else f"{str(used_win):>3}"
+        
+        vol_value = filter_result.get('market_vol')
+        vol_str = f"{vol_value:.2%}" if isinstance(vol_value, (int, float)) and vol_value is not None else "N/A"
+        
+        print(f"  market_vol_window={window:3d} → {status} | использовано окно={used_win_str} | волатильность={vol_str}")
 
-    # === ЗАПУСК БЭКТЕСТА ===
-    print("\n▶ Запуск бэктеста с production-параметрами...")
-    strategy = DualMomentumStrategy(**cfg.production_params, debug=False)
+    # === ЗАПУСК БЭКТЕСТА С ПРОДАКШН-ПАРАМЕТРАМИ ===
+    print("\n▶ ЗАПУСК БЭКТЕСТА С ПРОИЗВОДСТВЕННЫМИ ПАРАМЕТРАМИ...")
+    print(f"   Версия стратегии: {production_params.get('version', 'N/A')}")
+    print(f"   Базовое окно момента: {production_params['base_lookback']} дней")
+    print(f"   Окно волатильности активов: {production_params['base_vol_window']} дней")
+    print(f"   Окно волатильности рынка: {production_params['market_vol_window']} дней")
+    print(f"   Порог рыночной волатильности: {production_params['market_vol_threshold']:.1%} годовых")
+    
+    # 🔑 ИСПРАВЛЕНО: фильтрация неподдерживаемых параметров
+    # Параметр 'trend_r_squared_threshold' используется ТОЛЬКО для отчётов тренда,
+    # но не принимается конструктором DualMomentumStrategy
+    strategy_params = filter_strategy_params(production_params)
+    strategy = DualMomentumStrategy(**strategy_params)
+    
     bt = Backtester(
-        commission=cfg.commission,
-        default_commission=cfg.default_commission,
-        slippage=cfg.slippage,
-        use_slippage=cfg.use_slippage,
+        commission=commission,
+        default_commission=default_commission,
+        slippage=slippage,
+        use_slippage=use_slippage,
         trade_time_filter=trade_time_filter
     )
 
@@ -107,13 +167,14 @@ def main():
             data,
             market_data=market_df,
             rvi_data=rvi_data,
-            initial_capital=cfg.initial_capital
+            initial_capital=initial_capital
         )
-        print("\n✅ Бэктест завершён:")
-        print(f"Финальная стоимость: {result['final_value']:,.2f}")
-        print(f"CAGR: {result['cagr']:.2%}")
-        print(f"Sharpe: {result['sharpe']:.2f}")
-        print(f"Max DD: {result['max_drawdown']:.2%}")
+        print("\n✅ БЭКТЕСТ ЗАВЕРШЁН:")
+        print(f"   Финальная стоимость: {result['final_value']:,.2f} ₽")
+        print(f"   CAGR: {result['cagr']:.2%}")
+        print(f"   Sharpe Ratio: {result['sharpe']:.2f}")
+        print(f"   Макс. просадка: {result['max_drawdown']:.2%}")
+        print(f"   Количество сделок: {result.get('total_trades', 'N/A')}")
         
         # 🔑 ДИАГНОСТИКА: Анализ использования рыночного фильтра
         if 'market_filter_stats' in result:
@@ -121,26 +182,29 @@ def main():
             total_days = stats.get('total_days', 0)
             rvi_triggered = stats.get('rvi_triggered', 0)
             vol_triggered = stats.get('vol_triggered', 0)
-            print(f"\n📊 Статистика рыночного фильтра:")
-            print(f"  Всего торговых дней: {total_days}")
-            print(f"  Срабатываний по RVI: {rvi_triggered} ({rvi_triggered/total_days:.1%})")
-            print(f"  Срабатываний по волатильности: {vol_triggered} ({vol_triggered/total_days:.1%})")
-            print(f"  Общая защита капитала: {(rvi_triggered + vol_triggered)/total_days:.1%}")
+            total_triggered = rvi_triggered + vol_triggered
+            
+            print(f"\n📊 СТАТИСТИКА РЫНОЧНОГО ФИЛЬТРА:")
+            print(f"   Всего торговых дней: {total_days}")
+            print(f"   Срабатываний по RVI (≥36): {rvi_triggered} ({rvi_triggered/total_days:.1%})")
+            print(f"   Срабатываний по волатильности (≥35%): {vol_triggered} ({vol_triggered/total_days:.1%})")
+            print(f"   Общая защита капитала: {total_triggered} дней ({total_triggered/total_days:.1%})")
+            print(f"   Средняя длительность режима защиты: {total_triggered / max(1, (rvi_triggered > 0) + (vol_triggered > 0)):.1f} дня")
 
     except Exception as e:
-        print(f"❌ Ошибка при бэктесте: {e}")
+        print(f"\n❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ БЭКТЕСТЕ: {e}")
         import traceback
         traceback.print_exc()
         return
 
-    # === ЗАПУСК ОПТИМИЗАЦИИ ===
-    print("\n🔍 Запуск полной оптимизации...")
-    keys = list(cfg.param_grid.keys())
-    values = list(cfg.param_grid.values())
+    # === ЗАПУСК ПОЛНОЙ ОПТИМИЗАЦИИ (ОПЦИОНАЛЬНО) ===
+    print("\n🔍 ЗАПУСК ПОЛНОЙ ОПТИМИЗАЦИИ (опционально)...")
+    keys = list(param_grid.keys())
+    values = list(param_grid.values())
     total = len(list(product(*values)))
-    print(f"⚙️  Всего комбинаций: {total}")
-
-    # ... остальной код оптимизации без изменений ...
+    print(f"   ⚙️  Всего комбинаций в полной сетке: {total:,}")
+    print(f"   💡 Рекомендуется использовать пошаговую оптимизацию (stepwise_optimization4.py)")
+    print(f"      для избежания комбинаторного взрыва и переобучения.")
 
 
 if __name__ == "__main__":

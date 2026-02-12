@@ -205,7 +205,7 @@ if __name__ == "__main__":
         'rvi_high_exit_threshold': [42],
         'rvi_low_threshold': [14],
         'rvi_medium_threshold': [25],
-        'rvi_low_multiplier': [1.0, 1.5, 2.0],  # Исправлено: было 12.0 (опечатка)
+        'rvi_low_multiplier': [1.3],  # Исправлено: было 12.0 (опечатка)
         'rvi_high_multiplier': [0.73],
         'use_rvi_adaptation': [True],  # Явно включаем адаптацию
         'use_trend_filter': [True],

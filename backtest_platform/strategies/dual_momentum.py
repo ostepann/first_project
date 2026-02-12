@@ -250,7 +250,9 @@ class DualMomentumStrategy(BaseStrategy):
                 **common_params
             )
         else:
-            trend_analysis_window = windows['lookback_period'] if self.use_rvi_adaptation else self.trend_window
+            trend_analysis_window = int(windows['lookback_period'] * 0.7) if self.use_rvi_adaptation else self.trend_window
+#            trend_analysis_window = self.trend_window
+#            print ("trend_analysis_window =", trend_analysis_window)
             base_logic = AdaptiveMomentumLogic(
                 lookback_period=windows['lookback_period'],
                 vol_window_asset=windows['vol_window_asset'],

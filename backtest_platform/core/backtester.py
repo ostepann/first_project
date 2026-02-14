@@ -3,11 +3,18 @@
 """
 Модуль бэктестера для оценки торговых стратегий на исторических данных.
 
-Версия: 1.3.0
+Версия: 1.3.2
 Изменения:
-- Возврат диагностического поля used_market_vol_window как МАКСИМАЛЬНОГО значения за период (а не последнего)
-- Это значение напрямую зависит от rvi_low_multiplier: max_window = market_vol_window * rvi_low_multiplier
-- Устранена проблема с постоянным значением 15 для всех комбинаций параметров
+- Возврат диагностического поля used_market_vol_window как МАКСИМАЛЬНОГО значения за период
+- ДОБАВЛЕНО: возврат total_trades — общее количество сделок за период
+- ДОБАВЛЕНО: расширенный лог сделок с детализацией:
+    • quantity — количество купленных/проданных бумаг (штук)
+    • quantity_signed — количество со знаком (+ покупка, - продажа)
+    • execution_price — цена исполнения со всеми издержками
+    • market_price — рыночная цена на дату сделки (для расчёта текущей стоимости позиции)
+    • cash_balance — остаток наличных ПОСЛЕ сделки
+    • position_value — стоимость текущей позиции в бумагах ПОСЛЕ сделки
+    • total_value — общая стоимость портфеля ПОСЛЕ сделки (наличные + позиция)
 """
 
 import pandas as pd
@@ -15,9 +22,9 @@ import numpy as np
 from typing import Dict, Optional, Union
 
 # Метаданные модуля
-__version__ = "1.3.0"
+__version__ = "1.3.2"
 __author__ = "Oleg Dev"
-__date__ = "2026-02-08"
+__date__ = "2026-02-14"
 
 class Backtester:
     """
@@ -28,6 +35,7 @@ class Backtester:
     - Фильтрацию по времени торговли (для интрадей-данных)
     - Сбор диагностической информации из сигналов стратегии
     - Расчёт ключевых метрик эффективности (CAGR, Sharpe, Max Drawdown)
+    - Детализированный лог сделок с полным состоянием портфеля
     """
     
     def __init__(
@@ -147,13 +155,24 @@ class Backtester:
         
         Возвращает:
             Словарь с результатами:
-            - 'portfolio_value': DataFrame с динамикой портфеля
-            - 'trades': DataFrame со всеми сделками
+            - 'portfolio_value': DataFrame с динамикой портфеля (дата, стоимость)
+            - 'trades': DataFrame со всеми сделками, включая:
+                * date — дата сделки
+                * action — тип сделки (BUY/SELL)
+                * ticker — тикер актива
+                * execution_price — цена исполнения со всеми издержками
+                * market_price — рыночная цена на дату сделки
+                * quantity — количество бумаг в сделке (абсолютное значение)
+                * quantity_signed — количество со знаком (+ покупка, - продажа)
+                * cash_balance — остаток наличных ПОСЛЕ сделки
+                * position_value — стоимость текущей позиции ПОСЛЕ сделки
+                * total_value — общая стоимость портфеля ПОСЛЕ сделки
+            - 'total_trades': int — общее количество сделок за период
             - 'final_value': финальная стоимость портфеля
             - 'cagr': годовая доходность (252 торговых дня)
             - 'sharpe': коэффициент Шарпа (годовой)
             - 'max_drawdown': максимальная просадка
-            - 'used_market_vol_window': МАКСИМАЛЬНОЕ использованное окно за период (ключевой показатель влияния rvi_low_multiplier)
+            - 'used_market_vol_window': МАКСИМАЛЬНОЕ использованное окно за период
             - 'rvi_low_days': количество дней с низким RVI (уровень 'low')
         """
         # Фильтрация данных по времени
@@ -213,31 +232,74 @@ class Backtester:
                 rvi_low_days += 1
 
             if selected != current_asset:
-                # Продажа старого
+                # ===== ПРОДАЖА СТАРОГО АКТИВА =====
                 if current_asset in positions and positions[current_asset] > 0:
                     sell_df = filtered_data[current_asset]
                     sell_row = sell_df[sell_df['TRADEDATE'] == date]
                     if not sell_row.empty:
-                        sell_price = sell_row[price_col].iloc[0]
-                        sell_price = self._apply_costs(sell_price, current_asset, is_buy=False)
-                        cash = positions[current_asset] * sell_price
+                        # Рыночная цена ДО применения издержек (для расчёта текущей стоимости позиции)
+                        market_price_sell = sell_row[price_col].iloc[0]
+                        # Цена исполнения С издержками
+                        execution_price_sell = self._apply_costs(market_price_sell, current_asset, is_buy=False)
+                        
+                        # Количество продаваемых бумаг
+                        quantity_sell = positions[current_asset]
+                        
+                        # Расчёт нового состояния портфеля
+                        cash = quantity_sell * execution_price_sell
                         positions[current_asset] = 0.0
-                        trades.append({'date': date, 'action': 'SELL', 'ticker': current_asset, 'price': sell_price})
+                        
+                        # Добавляем сделку с полной детализацией
+                        trades.append({
+                            'date': date,
+                            'action': 'SELL',
+                            'ticker': current_asset,
+                            'execution_price': execution_price_sell,
+                            'market_price': market_price_sell,
+                            'quantity': quantity_sell,          # Абсолютное количество
+                            'quantity_signed': -quantity_sell,  # Со знаком (- для продажи)
+                            'cash_balance': cash,
+                            'position_value': 0.0,
+                            'total_value': cash
+                        })
 
-                # Покупка нового
+                # ===== ПОКУПКА НОВОГО АКТИВА =====
                 if selected in filtered_data:
                     buy_df = filtered_data[selected]
                     buy_row = buy_df[buy_df['TRADEDATE'] == date]
                     if not buy_row.empty:
-                        buy_price = buy_row[price_col].iloc[0]
-                        buy_price = self._apply_costs(buy_price, selected, is_buy=True)
-                        if buy_price > 0:
-                            positions[selected] = cash / buy_price
-                            cash = 0.0
-                            trades.append({'date': date, 'action': 'BUY', 'ticker': selected, 'price': buy_price})
+                        # Рыночная цена ДО применения издержек
+                        market_price_buy = buy_row[price_col].iloc[0]
+                        # Цена исполнения С издержками
+                        execution_price_buy = self._apply_costs(market_price_buy, selected, is_buy=True)
+                        
+                        # Количество покупаемых бумаг
+                        quantity_buy = cash / execution_price_buy if execution_price_buy > 0 else 0.0
+                        
+                        # Обновление состояния портфеля
+                        positions[selected] = quantity_buy
+                        cash = 0.0 if quantity_buy > 0 else cash
+                        
+                        # Текущая рыночная стоимость позиции (без издержек)
+                        position_value = quantity_buy * market_price_buy
+                        
+                        # Добавляем сделку с полной детализацией
+                        trades.append({
+                            'date': date,
+                            'action': 'BUY',
+                            'ticker': selected,
+                            'execution_price': execution_price_buy,
+                            'market_price': market_price_buy,
+                            'quantity': quantity_buy,           # Абсолютное количество
+                            'quantity_signed': quantity_buy,    # Со знаком (+ для покупки)
+                            'cash_balance': cash,
+                            'position_value': position_value,
+                            'total_value': cash + position_value
+                        })
 
                 current_asset = selected
 
+            # ===== РАСЧЁТ ТЕКУЩЕЙ СТОИМОСТИ ПОРТФЕЛЯ =====
             current_value = cash
             for ticker, qty in positions.items():
                 if qty > 0:
@@ -249,15 +311,17 @@ class Backtester:
             portfolio_values.append({'date': date, 'value': current_value})
 
         pv_df = pd.DataFrame(portfolio_values)
+        total_trades = len(trades)
+        
         if pv_df.empty:
             return {
                 'portfolio_value': pv_df,
                 'trades': pd.DataFrame(trades),
+                'total_trades': total_trades,
                 'final_value': initial_capital,
                 'cagr': 0.0,
                 'sharpe': 0.0,
                 'max_drawdown': 0.0,
-                # 🔑 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: возвращаем МАКСИМАЛЬНОЕ окно
                 'used_market_vol_window': None,
                 'rvi_low_days': rvi_low_days
             }
@@ -270,11 +334,11 @@ class Backtester:
         return {
             'portfolio_value': pv_df,
             'trades': pd.DataFrame(trades) if trades else pd.DataFrame(),
+            'total_trades': total_trades,
             'final_value': pv_df['value'].iloc[-1],
             'cagr': cagr,
             'sharpe': sharpe,
             'max_drawdown': dd,
-            # 🔑 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: возвращаем МАКСИМАЛЬНОЕ окно за период
             'used_market_vol_window': max_vol_window,
             'rvi_low_days': rvi_low_days
         }

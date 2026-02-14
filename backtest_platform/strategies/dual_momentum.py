@@ -16,6 +16,12 @@
 
 ОСНОВНОЕ ИЗМЕНЕНИЕ В ВЕРСИИ 1.2.0:
 Добавлена поддержка абсолютного импульса (absolute momentum)
+
+Версия: 1.2.1 (улучшение диагностичности рыночного фильтра)
+КРИТИЧЕСКОЕ УЛУЧШЕНИЕ:
+Поля 'market_vol' и 'used_vol_window' теперь ВСЕГДА заполняются при наличии данных,
+даже если фильтр срабатывает по RVI. Это позволяет корректно отображать диагностическую
+информацию в тестах и отчётах.
 """
 
 from backtest_platform.core.base_strategy import BaseStrategy
@@ -28,9 +34,9 @@ import numpy as np
 import warnings
 from typing import Optional, Dict
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __author__ = "Oleg Dev"
-__date__ = "2026-02-08"
+__date__ = "2026-02-14"
 
 class DualMomentumStrategy(BaseStrategy):
     """
@@ -148,6 +154,11 @@ class DualMomentumStrategy(BaseStrategy):
         """
         ДВУХЭТАПНЫЙ рыночный фильтр с поддержкой адаптированного окна волатильности.
         
+        КРИТИЧЕСКОЕ УЛУЧШЕНИЕ ВЕРСИИ 1.2.1:
+        Поля 'market_vol' и 'used_vol_window' ВСЕГДА заполняются при наличии рыночных данных,
+        даже если фильтр срабатывает по RVI. Это обеспечивает полную диагностическую информацию
+        в тестах и отчётах.
+        
         Параметры:
             market_data: Данные рыночного индекса (например, IMOEX)
             rvi_data: Данные индекса волатильности RVI
@@ -157,10 +168,10 @@ class DualMomentumStrategy(BaseStrategy):
         Возвращает:
             Словарь с результатами фильтрации:
             - 'triggered': bool — сработал ли фильтр
-            - 'stage': str — этап срабатывания ('rvi' или 'volatility')
-            - 'rvi_value': float — текущее значение RVI
-            - 'market_vol': float — рассчитанная волатильность рынка
-            - 'used_vol_window': int — фактически использованное окно
+            - 'stage': str — этап срабатывания ('rvi' или 'volatility' или None)
+            - 'rvi_value': float — текущее значение RVI (None если недоступно)
+            - 'market_vol': float — рассчитанная волатильность рынка (None если недоступна)
+            - 'used_vol_window': int — фактически использованное окно (None если расчёт невозможен)
             - 'rationale': str — пояснение решения
         """
         result = {
@@ -172,23 +183,11 @@ class DualMomentumStrategy(BaseStrategy):
             'rationale': ''
         }
         
-        # ===== ИЗВЛЕЧЕНИЕ RVI =====
+        # ===== ШАГ 1: Извлечение значения RVI =====
         if rvi_data is not None and not rvi_data.empty:
             result['rvi_value'] = float(rvi_data['CLOSE'].iloc[-1])
         
-        # ===== ЭТАП 1: Проверка RVI =====
-        if result['rvi_value'] is not None and result['rvi_value'] >= self.rvi_high_exit_threshold:
-            result.update({
-                'triggered': True,
-                'stage': 'rvi',
-                'rationale': (
-                    f"RVI={result['rvi_value']:.2f} ≥ порога {self.rvi_high_exit_threshold} → "
-                    "блокировка торговли"
-                )
-            })
-            return result
-        
-        # ===== ЭТАП 2: Проверка волатильности РЫНКА =====
+        # ===== ШАГ 2: Расчёт волатильности РЫНКА (ВСЕГДА выполняется при наличии данных) =====
         vol_window_requested = vol_window_override if vol_window_override is not None else self.market_vol_window
         vol_window_effective = vol_window_requested
         
@@ -206,7 +205,7 @@ class DualMomentumStrategy(BaseStrategy):
             else:
                 vol_window_effective = vol_window_requested
             
-            # Расчёт волатильности с ЭФФЕКТИВНЫМ окном
+            # Расчёт волатильности с ЭФФЕКТИВНЫМ окном (выполняется ВСЕГДА при возможности)
             if vol_window_effective >= 5:
                 market_vol_series = rolling_volatility(market_returns, vol_window_effective)
                 
@@ -214,21 +213,34 @@ class DualMomentumStrategy(BaseStrategy):
                     market_vol = float(market_vol_series.iloc[-1])
                     result['market_vol'] = market_vol
                     result['used_vol_window'] = vol_window_effective
-                    
-                    if market_vol >= self.market_vol_threshold:
-                        result.update({
-                            'triggered': True,
-                            'stage': 'volatility',
-                            'rationale': (
-                                f"Волатильность рынка={market_vol:.4f} ({market_vol:.2%}) ≥ "
-                                f"порога {self.market_vol_threshold:.4f} "
-                                f"(запрошено окно={vol_window_requested}, использовано={vol_window_effective}) → "
-                                "блокировка торговли"
-                            )
-                        })
-                        return result
         
-        # ===== ФИЛЬТР НЕ СРАБОТАЛ =====
+        # ===== ШАГ 3: Проверка условия срабатывания по RVI =====
+        if result['rvi_value'] is not None and result['rvi_value'] >= self.rvi_high_exit_threshold:
+            result.update({
+                'triggered': True,
+                'stage': 'rvi',
+                'rationale': (
+                    f"RVI={result['rvi_value']:.2f} ≥ порога {self.rvi_high_exit_threshold} → "
+                    "блокировка торговли"
+                )
+            })
+            return result
+        
+        # ===== ШАГ 4: Проверка условия срабатывания по волатильности =====
+        if result['market_vol'] is not None and result['market_vol'] >= self.market_vol_threshold:
+            result.update({
+                'triggered': True,
+                'stage': 'volatility',
+                'rationale': (
+                    f"Волатильность рынка={result['market_vol']:.4f} ({result['market_vol']:.2%}) ≥ "
+                    f"порога {self.market_vol_threshold:.4f} "
+                    f"(запрошено окно={vol_window_requested}, использовано={result['used_vol_window']}) → "
+                    "блокировка торговли"
+                )
+            })
+            return result
+        
+        # ===== ШАГ 5: ФИЛЬТР НЕ СРАБОТАЛ =====
         rvi_info = f"RVI={result['rvi_value']:.2f} < {self.rvi_high_exit_threshold}" if result['rvi_value'] is not None else "RVI недоступен"
         vol_info = f"волатильность={result['market_vol']:.2%} < {self.market_vol_threshold:.2%}" if result['market_vol'] is not None else "волатильность недоступна"
         

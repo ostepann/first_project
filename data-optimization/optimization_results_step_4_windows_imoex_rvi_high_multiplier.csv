@@ -1,0 +1,5 @@
+base_lookback,market_vol_window,base_vol_window,market_vol_threshold,max_vol_threshold,rvi_high_exit_threshold,rvi_low_threshold,rvi_medium_threshold,rvi_low_multiplier,rvi_high_multiplier,use_rvi_adaptation,use_trend_filter,trend_window,trend_filter_on_insufficient_data,bare_mode,risk_free_ticker,debug,used_market_vol_window,total_trades,time_in_cash_pct,final_value,cagr,sharpe,max_drawdown,calmar,sortino,volatility
+30,21,8,0.35,0.3,36,20,24,1.4,0.72,True,True,60,allow,False,LQDT,False,29,309,,3699272.9023375087,0.43770923823685326,3.6460560047728667,-0.05866539821804062,,,
+30,21,8,0.35,0.3,36,20,24,1.4,0.72,True,False,60,allow,False,LQDT,False,29,327,,3395472.136332703,0.40391992638215934,3.3786304742200834,-0.09029578242727698,,,
+30,21,8,0.35,0.3,36,20,24,1.4,0.72,False,True,60,allow,False,LQDT,False,21,257,,2652081.6099790367,0.3108691880147716,2.889266856250267,-0.1117366234362912,,,
+30,21,8,0.35,0.3,36,20,24,1.4,0.72,False,False,60,allow,False,LQDT,False,21,265,,2633726.570914416,0.30834494465066475,2.8530586680254135,-0.11418119013474992,,,

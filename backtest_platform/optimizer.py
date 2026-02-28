@@ -1,3 +1,5 @@
+# first_project\backtest_platform\optimizer.py
+
 """
 ОПТИМИЗАТОР ДЛЯ СТРАТЕГИИ DUAL MOMENTUM НА МОСБИРЖЕ
 

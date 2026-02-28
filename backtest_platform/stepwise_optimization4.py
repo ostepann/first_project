@@ -48,6 +48,16 @@ def load_all_data():
         data[ticker] = df
         print(f"✅ {ticker}: {df['TRADEDATE'].min().date()} → {df['TRADEDATE'].max().date()} ({len(df)} строк)")
 
+    # 🔧 ИСПРАВЛЕНИЕ: Загрузка market_df отдельно (как RVI), а не из data[tickers]
+    market_path = os.path.join(data_path, f'{market_ticker}.csv')
+    market_df = None
+    if os.path.exists(market_path):
+        market_df = load_market_data(market_path)
+        market_df['TRADEDATE'] = pd.to_datetime(market_df['TRADEDATE'])
+        print(f"✅ {market_ticker} загружен: {market_df['TRADEDATE'].min().date()} → {market_df['TRADEDATE'].max().date()} ({len(market_df)} строк)")
+    else:
+        raise FileNotFoundError(f"❌ Файл рыночного индекса не найден: {market_path}")
+
     rvi_path = os.path.join(data_path, f'{rvi_ticker}.csv')
     rvi_data = None
     if os.path.exists(rvi_path):
@@ -57,7 +67,6 @@ def load_all_data():
     else:
         print(f"⚠️ {rvi_ticker}.csv не найден — используется средний уровень волатильности для рыночного фильтра")
 
-    market_df = data[market_ticker].copy()
     return data, market_df, rvi_data
 
 
@@ -192,10 +201,11 @@ if __name__ == "__main__":
     
     # === ШАГ 1: ОПТИМИЗАЦИЯ ОКОН ВОЛАТИЛЬНОСТИ И ПОРОГОВ ===
     # Используем значения из production_params как базу для тонкой настройки
+
     temp_grid_step1 = {
-        'base_lookback': [29],
+        'base_lookback': [30],   #Лучшие [29]
         'market_vol_window': [21],  # Фиксировано после определения оптимума (21 день = 1 месяц)
-        'base_vol_window': [9],     # Фиксировано после определения оптимума (короткое окно для активов)
+        'base_vol_window': [8],   # Лучшие [9]  # Фиксировано после определения оптимума (короткое окно для активов)
         
         # 🔑 Пороги волатильности (ГОДОВЫЕ ЗНАЧЕНИЯ!)
         'market_vol_threshold': [0.35],  # 35% годовых — оптимальный баланс защиты/участия
@@ -203,15 +213,15 @@ if __name__ == "__main__":
         
         # === RVI-АДАПТАЦИЯ (зафиксированы после калибровки) ===
         'rvi_high_exit_threshold': [36],   # Порог немедленного выхода в кэш (75-й перцентиль + буфер)
-        'rvi_low_threshold': [19],         # Переход к режиму низкой волатильности
-        'rvi_medium_threshold': [25],      # Переход к режиму высокой волатильности
-        'rvi_low_multiplier': [1.2],       # Удлинение окон при низкой волатильности (+20%)
-        'rvi_high_multiplier': [0.71],     # Сокращение окон при высокой волатильности (-29%)
+        'rvi_low_threshold': [20],         # Переход к режиму низкой волатильности
+        'rvi_medium_threshold': [24],      # Переход к режиму высокой волатильности
+        'rvi_low_multiplier': [1.4],       # Удлинение окон при низкой волатильности (+20%)
+        'rvi_high_multiplier': [0.72],     # Сокращение окон при высокой волатильности (-29%)
         
         # === ФЛАГИ РЕЖИМОВ (наследуем из production_params) ===
-        'use_rvi_adaptation': [production_params['use_rvi_adaptation']],
-        'use_trend_filter': [production_params['use_trend_filter']],
-        'trend_window': [production_params['trend_window']],
+        'use_rvi_adaptation': [True],  # [production_params['use_rvi_adaptation']],
+        'use_trend_filter': [True],  # [production_params['use_trend_filter']],
+        'trend_window': [60], #[production_params['trend_window']],
         'trend_filter_on_insufficient_data': [production_params['trend_filter_on_insufficient_data']],
         'bare_mode': [production_params['bare_mode']],
         'risk_free_ticker': [production_params['risk_free_ticker']],
@@ -224,7 +234,7 @@ if __name__ == "__main__":
     print("Цель: Подтверждение стабильности параметров на полном периоде данных")
     print(f"Базовые параметры взяты из production_cfg.py (версия {production_params.get('version', 'N/A')})")
 
-    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_4_Windows")
+    best_params_step1 = run_stepwise_optimization(temp_grid_step1, "Step_4_Windows_IMOEX_trend_window")
 
     if best_params_step1:
         print(f"\n✨ ЛУЧШИЕ ПАРАМЕТРЫ ПОСЛЕ ФИНАЛЬНОЙ ВАЛИДАЦИИ:")
